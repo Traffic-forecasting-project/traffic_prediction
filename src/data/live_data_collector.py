@@ -173,12 +173,12 @@ def collect(lat, lon):
         return None
 
 
-def save_csv(df):
-
-    if os.path.exists(CSV_PATH):
-        df.to_csv(CSV_PATH, mode='a', header=False, index=False)
+def save_csv(df,arrondissement):
+    new_csv_path = CSV_PATH.replace(".csv",f'_{arrondissement}.csv')
+    if os.path.exists(new_csv_path):
+        df.to_csv(new_csv_path, mode='a', header=False, index=False)
     else:
-        df.to_csv(CSV_PATH, index=False)
+        df.to_csv(new_csv_path, index=False)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -201,7 +201,7 @@ if __name__ == "__main__":
         df = collect(lat,lon)
         print("Extracting data from point {},{}".format(lat,lon),flush=True)
         if df is not None:
-            save_csv(df)
+            save_csv(df,arrondissement)
             success_count += 1
             logging.info(f"Progress: {success_count}/{MAX_ROWS} rows collected.")
         else:
