@@ -22,8 +22,11 @@ import time
 import logging
 import sys
 import io
+import json
 sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
 from dotenv import load_dotenv
+import argparse
+import random
 
 ##  Load API keys from .env file
 load_dotenv()
@@ -34,17 +37,10 @@ WEATHER_KEY = os.getenv("WEATHER_KEY")
 os.makedirs('live', exist_ok=True)
 os.makedirs('logs', exist_ok=True)
 
-## Bounding box for EXACTLY Paris 8th arrondissement
-BBOX = (48.86, 2.30, 48.89, 2.33)
-LAT, LON = 48.875, 2.316
-#BBOX = (48.85, 2.28, 48.90, 2.35)  # Paris 8th arrondissement ++
-
 CSV_PATH = "live/live_data.csv"
 
 ## Call limit parameters (half for historcal half for live)
 ## API call tracking
-#MAX_CALLS_PER_DAY = 2400 # ==> limit for tomtom
-#MAX_CALLS_PER_DAY = 1200 # ==> limit for tomtom, considering other half for historical
 MAX_CALLS_PER_DAY = 1000 # ==> limit for weather
 CALL_DELAY_SECONDS = 20
 calls_today = 0
@@ -78,13 +74,13 @@ def safe_request(url, params):
     
     return r
 
-def get_weather():
+def get_weather(lat,lon):
 
     url = "https://api.openweathermap.org/data/2.5/weather"
     
     params = {
-        'lat': LAT,
-        'lon': LON,
+        'lat': lat,
+        'lon': lon,
         'appid': WEATHER_KEY,
         'units': 'metric'
     }
@@ -99,8 +95,8 @@ def get_weather():
         "rain": data.get("rain", {}).get("1h", 0)
     }
 
-def get_traffic_flow(lat, lon):
-
+def get_traffic_flow(lat, lon):   
+    # # Proceed to fetch traffic flow data using the snapped coordinates
     url = "https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json"
     
     params = {
@@ -120,6 +116,7 @@ def get_traffic_flow(lat, lon):
         "free_flow_speed": data["flowSegmentData"]["freeFlowSpeed"],
         "jam_factor": data["flowSegmentData"]["confidence"]
     }
+
 
 def get_incidents(lat, lon):
 
@@ -151,15 +148,21 @@ def get_last_timestamp():
             
     return None
 
-def collect():
+def extract_point_list_from_geometry(geometry_str):
+    geom = json.loads(geometry_str)
+    coords = geom["coordinates"][0]
+    return coords
 
+def collect(lat, lon):
     try:
-        ts = datetime.datetime.now().replace(second=0, microsecond=0)
-        traffic = get_traffic_flow(LAT, LON)
-        weather = get_weather()
-        incidents = get_incidents(LAT, LON)
+        ts = datetime.datetime.now().replace(microsecond=0)
+        traffic = get_traffic_flow(lat, lon)
+        weather = get_weather(lat, lon)
+        incidents = get_incidents(lat, lon)
         row = {
             "timestamp": ts.isoformat(),
+            "lat": lat,         # added latitude
+            "lon": lon,         # added longitude
             **incidents,
             **traffic,
             **weather
@@ -169,6 +172,7 @@ def collect():
         logging.error(f"Data collection failed: {e}")
         return None
 
+
 def save_csv(df):
 
     if os.path.exists(CSV_PATH):
@@ -177,14 +181,25 @@ def save_csv(df):
         df.to_csv(CSV_PATH, index=False)
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
 
+    parser.add_argument("--arrondissement", help="Paris arrondissement from 1 to 20", type=int, default=8)
+
+    args = parser.parse_args()
+
+    arrondissement = args.arrondissement
+
+    point_list = extract_point_list_from_geometry (
+        pd.read_csv("src/data/arrondissements.csv").iloc[arrondissement-1]["Geometry"])
+    print("Total of points at arrondissement {} : {}".format(arrondissement,len(point_list)),flush=True)
+    
     success_count = 0
     MAX_ROWS = 1000 ## successfull calls per day
 
     while success_count < MAX_ROWS and calls_today + 3 <= MAX_CALLS_PER_DAY:
-    
-        df = collect()
-        
+        lon,lat = random.choice(point_list) ## Will always be random inside the point list
+        df = collect(lat,lon)
+        print("Extracting data from point {},{}".format(lat,lon),flush=True)
         if df is not None:
             save_csv(df)
             success_count += 1
