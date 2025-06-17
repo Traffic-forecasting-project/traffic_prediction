@@ -4,7 +4,7 @@ import pandas as pd
 import requests
 
 # API key and arrondissement number
-API_TOMTOM = os.environ["API_TOMTOM"]
+TOMTOMKEY = os.environ["TOMTOM_KEY"]
 ARR_NUMBER = 7
 
 # Load arrondissement boundaries
@@ -55,15 +55,15 @@ def get_incidents_df(arr_number, df, api_key):
     return pd.json_normalize(data)
 
 if __name__ == "__main__":
-    print("Using API key:", API_TOMTOM)
+    print("Using API key:", TOMTOMKEY)
 
     # Example: traffic flow request for a fixed point in Paris
     center_lat, center_lon = 48.8592, 2.3128
-    flow_data = get_flow_from_point(center_lat, center_lon, API_TOMTOM)
+    flow_data = get_flow_from_point(center_lat, center_lon, TOMTOMKEY)
     print("Flow currentSpeed:", flow_data.get("flowSegmentData", {}).get("currentSpeed"))
 
     # Get traffic incidents for the specified arrondissement
-    df_incidents = get_incidents_df(ARR_NUMBER, arr_df, API_TOMTOM)
+    df_incidents = get_incidents_df(ARR_NUMBER, arr_df, TOMTOMKEY)
     print(f"{len(df_incidents)} incident(s) found in arr {ARR_NUMBER}.")
     print(df_incidents.head())
 
@@ -72,7 +72,7 @@ if __name__ == "__main__":
         for i in range(len(df_incidents)):
             line_incident = df_incidents.loc[i, "geometry.coordinates"]
             lat, lon = extract_middle_point(line_incident)
-            incident_flow = get_flow_from_point(lat, lon, API_TOMTOM)
+            incident_flow = get_flow_from_point(lat, lon, TOMTOMKEY)
             current_speed = incident_flow.get("flowSegmentData", {}).get("currentSpeed")
             magnitude = df_incidents.loc[i, "properties.magnitudeOfDelay"]
             icon = df_incidents.loc[i, "properties.iconCategory"]
