@@ -42,15 +42,9 @@ The current structure only includes live collection; extracted datasetsn models 
 
 We focus on **live data extraction** instead of historical data for the following reasons:
 
-- The historical `Traffic Stats API` from TomTom is **paid and limited** during the free trial period.
+- The historical `Traffic Stats API` from TomTom is **paid and limited with partial data** during the free trial period.
 - With live data, we can automate calls and build a consistent time-series dataset.
-
-## Live Traffic Data Collection Strategy
-
-We chose **live traffic data** over historical data from TomTom because:
-
-- Historical data is **paid** as targeted data ara partial and Of course limited during the free trial.
-- Live API is **free**, gives real-time incidents and flow data.
+  - **Daily limits**: 2500 calls (TomTom), 1000 calls (Weather).
 
 We use a `.csv` file with **bounding boxes (BBOX)** of Paris arrondissements, applied fully or split.
 
@@ -63,7 +57,7 @@ The figure below illustrates the two possible strategies for data extraction:
 
 | Strategy              | Description                                          | Pros                                              | Cons                                                  |
 |-----------------------|------------------------------------------------------|---------------------------------------------------|--------------------------------------------------------|
-| **Traffic Analysis**  | Record traffic at fixed points                      | Easy to set up, real-time, no need for incidents  | Many empty calls, low incident yield or non realistic call number                |
+| **Traffic Analysis**  | Record traffic at fixed points                      | Easy to set up, real-time, no need for incidents  | Many empty calls, low incident yield or non realistic call number to detect               |
 | **Incident Analysis** | Get traffic where incidents occurred (via BBOX)     | Targeted, efficient, good incident coverage       | Misses pre-incident flow, no normal traffic context   |
 
 ---
