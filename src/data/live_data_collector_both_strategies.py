@@ -32,8 +32,8 @@ import random
 sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
 load_dotenv()
 
-# TOMTOM_KEY = os.getenv("TOMTOM_KEY")
-# WEATHER_KEY = os.getenv("WEATHER_KEY")
+TOMTOM_KEY = os.getenv("TOMTOM_KEY")
+WEATHER_KEY = os.getenv("WEATHER_KEY")
 
 os.makedirs('live', exist_ok=True)
 os.makedirs('logs', exist_ok=True)
@@ -292,31 +292,42 @@ def collect_from_bbox(lat1, lon1, lat2, lon2):
                         lon_i, lat_i = coord[:2]
                         incident_coords.append((lat_i, lon_i))
 
-        for lat, lon in incident_coords:
-        
-            ts = datetime.datetime.now().replace(microsecond=0)
+        total = len(incident_coords)
+        logging.info(f"{total} incident coordinates found in this bbox. Beginning data collection...")
 
-            if MULTIPLE_WEATHER_CALLS:
-                weather = get_weather(lat, lon)
-            else:
-                if last_weather_time is None or (datetime.datetime.now() - last_weather_time).total_seconds() > WEATHER_REFRESH_DELAY:
-                    last_weather_data = get_weather(lat, lon)
-                    last_weather_time = datetime.datetime.now()
-                weather = last_weather_data
+        for i, (lat, lon) in enumerate(incident_coords, start=1):
+            try:
+                logging.info(f"[{i}/{total}] Collecting incident at {lat},{lon}")
+                
+                ts = datetime.datetime.now().replace(microsecond=0)
 
-            traffic = get_traffic_flow(lat, lon)
+                if MULTIPLE_WEATHER_CALLS:
+                    weather = get_weather(lat, lon)
+                else:
+                    if last_weather_time is None or (datetime.datetime.now() - last_weather_time).total_seconds() > WEATHER_REFRESH_DELAY:
+                        last_weather_data = get_weather(lat, lon)
+                        last_weather_time = datetime.datetime.now()
+                    weather = last_weather_data
 
-            row = {
-                "timestamp": ts.isoformat(),
-                "lat": lat,
-                "lon": lon,
-                **incidents_raw,
-                **traffic,
-                **weather
-            }
-            
-            collected_rows.append(row)
-            logging.info(f"Data collected from incident at {lat},{lon}")
+                traffic = get_traffic_flow(lat, lon)
+
+                row = {
+                    "timestamp": ts.isoformat(),
+                    "lat": lat,
+                    "lon": lon,
+                    **incidents_raw,
+                    **traffic,
+                    **weather
+                }
+
+                df_row = pd.DataFrame([row])
+                save_csv(df_row, arrondissement)  # Save immediately
+                collected_rows.append(row)
+
+                logging.info(f"[{i}/{total}] Data collected and saved.")
+
+            except Exception as e:
+                logging.warning(f"[{i}/{total}] Failed at {lat},{lon}: {e}")
 
     except Exception as e:
         logging.warning(f"Failed bbox {lat1},{lon1},{lat2},{lon2} : {e}")
@@ -373,16 +384,29 @@ if __name__ == "__main__":
             #print(f"Extracting data from point {lat},{lon}", flush=True)         
             sampled_points = random.sample(points, min(NB_POINTS_TO_COLLECT, len(points)))
             df = collect(sampled_points)
-            logging.info(f"Extracting data from sampled points: {sampled_points}")
+            logging.info(f"Extracting data from sampled points: {sampled_points}", flush=True)
             #print(f"Extracting data from sampled points: {sampled_points}", flush=True)
 
         elif STRATEGY == "incident_analysis":
             bboxes = split_bbox(points, BBOX_SPLIT_COUNT)
-            bbox = random.choice(bboxes)
-            df = collect_from_bbox(*bbox)
-            logging.info(f"Extracting data from bbox: {bbox}")           
-            print(f"Extracting data from bbox: {bbox}")
+            for i, bbox in enumerate(bboxes, start=1):
+                logging.info(f"Processing bbox {i} of {len(bboxes)}: {bbox}")
+                df = collect_from_bbox(*bbox)
+                logging.info(f"Number of incident coordinates found: {len(df)}")
 
+                if df is not None and not df.empty:
+                    save_csv(df, arrondissement)
+                    success_count += len(df)
+                    logging.info(f"Progress: {success_count}/{MAX_ROWS} rows collected.")
+                else:
+                    logging.warning("No data collected from this bbox, moving to next.")
+
+                if success_count >= MAX_ROWS or calls_today + 3 > MAX_CALLS_PER_DAY:
+                    break
+
+                time.sleep(CALL_DELAY_SECONDS)
+                logging.info(f"Completed {i}/{len(bboxes)} bounding boxes.")
+              
         else:
             logging.error("Unknown strategy.")
             break
