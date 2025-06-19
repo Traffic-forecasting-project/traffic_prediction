@@ -373,15 +373,15 @@ if __name__ == "__main__":
             #print(f"Extracting data from point {lat},{lon}", flush=True)         
             sampled_points = random.sample(points, min(NB_POINTS_TO_COLLECT, len(points)))
             df = collect(sampled_points)
-            logging.info(f"Extracting data from sampled points: {sampled_points}", flush=True)
+            logging.info(f"Extracting data from sampled points: {sampled_points}")
             #print(f"Extracting data from sampled points: {sampled_points}", flush=True)
 
         elif STRATEGY == "incident_analysis":
             bboxes = split_bbox(points, BBOX_SPLIT_COUNT)
             bbox = random.choice(bboxes)
             df = collect_from_bbox(*bbox)
-            logging.info(f"Extracting data from bbox: {bbox}", flush=True)           
-            print(f"Extracting data from bbox: {bbox}", flush=True)
+            logging.info(f"Extracting data from bbox: {bbox}")           
+            print(f"Extracting data from bbox: {bbox}")
 
         else:
             logging.error("Unknown strategy.")
