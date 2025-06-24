@@ -704,9 +704,9 @@ def collect_from_bbox(lat1, lon1, lat2, lon2):
                 if MULTIPLE_WEATHER_CALLS:
                     weather = get_weather(lat, lon)
                 else:
-                    if last_weather_time is None or (datetime.datetime.now() - last_weather_time).total_seconds() > WEATHER_REFRESH_DELAY:
+                    if last_weather_time is None or (ts- last_weather_time).total_seconds() > WEATHER_REFRESH_DELAY:
                         last_weather_data = get_weather(lat, lon)
-                        last_weather_time = datetime.datetime.now()
+                        last_weather_time = ts 
                     weather = last_weather_data
 
                 ## Traffic
@@ -811,7 +811,6 @@ if __name__ == "__main__":
                 logging.info(f"Collected {len(df)} rows from bbox.")
 
                 if df is not None and not df.empty:
-                    save_csv(df, arrondissement, strategy = "incident_analysis")
                     success_count += len(df)
                     logging.info(f"Progress: {success_count}/{MAX_ROWS} rows collected.")
                 else:
@@ -828,8 +827,6 @@ if __name__ == "__main__":
             break
 
         if df is not None and not df.empty:
-            save_csv(df, arrondissement, strategy = STRATEGY)
-            success_count += len(df)
             logging.info(f"Progress updated: {success_count}/{MAX_ROWS} rows total.")
         else:
             logging.warning("Empty dataframe collected. Retrying after short delay.")
