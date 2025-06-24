@@ -48,12 +48,14 @@ ARRONDISSEMENTS_PATH = "src/data/arrondissements.csv"  ## (Old path if needed)
 #ARRONDISSEMENTS_PATH = "arrondissements.csv"
 
 NB_POINTS_TO_COLLECT = 5  ## Number of points to collect per arrondissement if strategy is 'traffic_analysis'
+SAMPLE_ALL_INCIDENTS = False ## Sample just one point per incident, or all points, useful if strategy is 'incident_analysis'
 
 MULTIPLE_WEATHER_CALLS = False  ## If True, call weather API for every point; otherwise reuse the latest result
 WEATHER_REFRESH_DELAY = 360  ## Refresh delay in seconds if weather is shared
 
 # STRATEGY = "traffic_analysis"  ## Strategy that samples points randomly inside the polygon
 STRATEGY = "incident_analysis"  ## Strategy based on incidents inside a bounding box
+
 
 BBOX_SPLIT_COUNT = 1  ## How many parts to split the bounding box into in 'incident_analysis' mode
 DELTA_BBOX = 0.01 ## range value for bbox over a random point of the original 'arrnondissement' box
@@ -359,9 +361,10 @@ def get_incidents(lat1, lon1, lat2, lon2):
         ## Fallback if no coordinates are found
         if not coords or not isinstance(coords, list):
             continue
-
+        if SAMPLE_ALL_INCIDENTS == False:
+            coords = coords[0:1] ## Just get the first point in the road (to modify, ideally the point in the center)
         ## Loop over coordinates involved in the incident
-        for coord in coords:
+        for coord in coords[0:1]:
             if not isinstance(coord, list) or len(coord) != 2:
                 continue
 
@@ -757,7 +760,7 @@ def parse_arguments():
     """
     
     parser = argparse.ArgumentParser()
-    parser.add_argument("-a", "--arrondissement", type=int, default=8,
+    parser.add_argument("-a", "--arrondissement", type=int, default=17,
                         help="The Paris arrondissement number (1 to 20). Default is 8.")
     parser.add_argument("-s", "--strategy", type=str, default="incident_analysis",
                         help="Choose strategy: 'traffic_analysis' or 'incident_analysis'. Default is 'incident_analysis'.")
