@@ -28,7 +28,7 @@ import json
 from dotenv import load_dotenv
 import argparse
 import random
-
+from zoneinfo import ZoneInfo   
 ## Ensure UTF-8 encoding for console output
 sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
 load_dotenv()
@@ -48,7 +48,7 @@ ARRONDISSEMENTS_PATH = "src/data/arrondissements.csv"  ## (Old path if needed)
 #ARRONDISSEMENTS_PATH = "arrondissements.csv"
 
 NB_POINTS_TO_COLLECT = 5  ## Number of points to collect per arrondissement if strategy is 'traffic_analysis'
-SAMPLE_ALL_INCIDENTS = False ## Sample just one point per incident, or all points, useful if strategy is 'incident_analysis'
+SAMPLE_ALL_INCIDENT_POINTS = False ## Sample just one point per incident, or all points, useful if strategy is 'incident_analysis'
 
 MULTIPLE_WEATHER_CALLS = False  ## If True, call weather API for every point; otherwise reuse the latest result
 WEATHER_REFRESH_DELAY = 360  ## Refresh delay in seconds if weather is shared
@@ -319,7 +319,14 @@ def get_traffic_flow(lat, lon):
         "free_flow_speed": free_flow_speed,
         "jam_factor": jam_factor
     }
-
+def convert_to_local_timezone(api_time):
+    if api_time is None:
+        return api_time
+    
+    time_utc = datetime.datetime.fromisoformat(api_time.replace("Z", "+00:00"))
+    # Convert to Paris time
+    dt_paris = time_utc.astimezone(ZoneInfo("Europe/Paris"))
+    return dt_paris
 def get_incidents(lat1, lon1, lat2, lon2):
     """
         Fetches incident data from TomTom API within a given bounding box
@@ -361,7 +368,7 @@ def get_incidents(lat1, lon1, lat2, lon2):
         ## Fallback if no coordinates are found
         if not coords or not isinstance(coords, list):
             continue
-        if SAMPLE_ALL_INCIDENTS == False:
+        if SAMPLE_ALL_INCIDENT_POINTS == False:
             coords = coords[0:1] ## Just get the first point in the road (to modify, ideally the point in the center)
         ## Loop over coordinates involved in the incident
         for coord in coords[0:1]:
@@ -378,8 +385,8 @@ def get_incidents(lat1, lon1, lat2, lon2):
                 "incident_roads": [props.get("roadNumbers", [])],
                 "incident_id": props.get("id"),
                 "icon_category": props.get("iconCategory"),
-                "start_time": props.get("startTime"),
-                "end_time": props.get("endTime"),
+                "start_time": convert_to_local_timezone(props.get("startTime")),
+                "end_time": convert_to_local_timezone(props.get("endTime")),
                 "from_location": props.get("from"),
                 "to_location": props.get("to"),
                 "length": props.get("length"),
@@ -401,7 +408,7 @@ def get_incidents(lat1, lon1, lat2, lon2):
 
     return processed_incidents
 
-def get_incidents_per_coordinate(lat1, lon1, lat2, lon2):
+def get_incidents_per_coordinate(lat1, lon1, lat2, lon2,ts=None):
     """
         [DEPRECATED] Retrieve detailed incidents from the TomTom API for each coordinate
         within the specified bounding box, and return individual records per coordinate
