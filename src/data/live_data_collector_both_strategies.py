@@ -93,7 +93,7 @@ def safe_request(url, params):
     global calls_today
 
     if calls_today >= MAX_CALLS_PER_DAY:
-        logging.warning("Max daily API calls reached.")
+        logging.warning("Max daily API calls reached ({} out of {})".format(calls_today,MAX_CALLS_PER_DAY))
         raise Exception("API limit reached")
 
     ## Respect the delay between calls to avoid bans
@@ -767,7 +767,7 @@ def parse_arguments():
     """
     
     parser = argparse.ArgumentParser()
-    parser.add_argument("-a", "--arrondissement", type=int, default=17,
+    parser.add_argument("-a", "--arrondissement", type=int, default=2,
                         help="The Paris arrondissement number (1 to 20). Default is 8.")
     parser.add_argument("-s", "--strategy", type=str, default="incident_analysis",
                         help="Choose strategy: 'traffic_analysis' or 'incident_analysis'. Default is 'incident_analysis'.")
