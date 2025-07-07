@@ -33,9 +33,6 @@ from zoneinfo import ZoneInfo
 sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
 load_dotenv()
 
-## Load API keys (can be hardcoded or pulled from .env)
-TOMTOM_KEY = os.getenv("TOMTOM_KEY")
-WEATHER_KEY = os.getenv("WEATHER_KEY")
 
 ## Create folders for data and logs
 os.makedirs('live', exist_ok=True)
@@ -45,7 +42,6 @@ CSV_PATH = "live/live_data.csv"  ## Output path for collected data
 
 ## Path to the arrondissement coordinates (polygon)
 ARRONDISSEMENTS_PATH = "src/data/arrondissements.csv"  ## (Old path if needed)
-#ARRONDISSEMENTS_PATH = "arrondissements.csv"
 
 NB_POINTS_TO_COLLECT = 5  ## Number of points to collect per arrondissement if strategy is 'traffic_analysis'
 SAMPLE_ALL_INCIDENT_POINTS = False ## Sample just one point per incident, or all points, useful if strategy is 'incident_analysis'
@@ -777,6 +773,9 @@ def parse_arguments():
 if __name__ == "__main__":
     args = parse_arguments()
     arrondissement = args.arrondissement
+    ## Load API keys (can be hardcoded or pulled from .env)
+    TOMTOM_KEY = os.getenv("TOMTOM_KEY_{}".format(arrondissement))
+    WEATHER_KEY = os.getenv("WEATHER_KEY_{}".format(arrondissement))
     
     STRATEGY = args.strategy
 
