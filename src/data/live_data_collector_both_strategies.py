@@ -76,29 +76,30 @@ logger.addHandler(console_handler)
 
 def safe_request(url, params):
     """
-        Makes a safe API request with delay and call counter
-
-        Args:
-            url (str): The API endpoint
-            params (dict): The query parameters
-
-        Returns:
-            Response: The HTTP response from requests.get()
+        Makes a safe API request with delay and call counter.
+        Exits the program if the API request fails (bad request, network error, etc.)
     """
-    
     global calls_today
 
     if calls_today >= MAX_CALLS_PER_DAY:
-        logging.warning("Max daily API calls reached ({} out of {})".format(calls_today,MAX_CALLS_PER_DAY))
-        raise Exception("API limit reached")
+        logging.error(f"Max daily API calls reached ({calls_today}/{MAX_CALLS_PER_DAY}). Exiting.")
+        sys.exit(1)
 
-    ## Respect the delay between calls to avoid bans
     time.sleep(CALL_DELAY_SECONDS)
 
-    r = requests.get(url, params=params)
-    calls_today += 1
+    try:
+        r = requests.get(url, params=params, timeout=15)
+        r.raise_for_status()  # Raise exception on 4xx or 5xx
+        calls_today += 1
+        return r
 
-    return r
+    except requests.exceptions.HTTPError as errh:
+        logging.error(f"HTTP error: {errh}. Exiting.")
+        sys.exit(1)
+    except requests.exceptions.RequestException as err:
+        logging.error(f"Request failed: {err}. Exiting.")
+        sys.exit(1)
+
 
 def load_arrondissement_data(path):
     """
