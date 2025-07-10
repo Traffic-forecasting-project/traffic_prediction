@@ -20,13 +20,14 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import (
     accuracy_score,
-    mean_squared_error,
+    root_mean_squared_error,
     mean_absolute_error,
     r2_score,
     median_absolute_error,
     classification_report,
     confusion_matrix,
 )
+
 from imblearn.over_sampling import SMOTE
 from prepare_data import create_features, create_target, TARGET_METADATA
 from logging_utils import get_logger, log_execution_time_and_path
@@ -178,7 +179,7 @@ def train_model(df: pd.DataFrame, strategy: str, target_name: str) -> dict:
         logger.info(f"\t\t[{strategy}] Confusion matrix:\n{matrix}")
         result.update({"metric": "accuracy", "value": acc})
     else:
-        rmse = mean_squared_error(y_test, y_pred, squared=False)
+        rmse = root_mean_squared_error(y_test, y_pred)
         mae = mean_absolute_error(y_test, y_pred)
         medae = median_absolute_error(y_test, y_pred)
         r2 = r2_score(y_test, y_pred)
@@ -212,7 +213,7 @@ def parse_args():
                         help="Training strategy to use")
     parser.add_argument("--targets", nargs="*", default=[],
                         help="Optional list of target variables")
-    parser.add_argument("--data_dir", type=str, default="live",
+    parser.add_argument("--data_dir", type=str, default="src/data/raw",
                         help="Directory containing CSV input data")
     parser.add_argument("--output_stats", type=str, default="model_stats.csv",
                         help="Path to output stats file")
