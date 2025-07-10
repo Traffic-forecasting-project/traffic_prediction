@@ -8,4 +8,4 @@ stages:
     - exports
     - models
     metrics:
-    - model_stats.csv
+    - metrics/model_stats.csv
