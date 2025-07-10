@@ -36,7 +36,7 @@ from logging_utils import get_logger, log_execution_time_and_path
 FILTER_STANDARD_INCIDENTS = True   ## Filter out extreme outliers for regression targets
 USE_TOP_FEATURES_ONLY = True      ## Restrict to top features if previous importances exist
 EDA_ENABLED = True
-TOP_FEATURES_FILE = "feature_importances.json"
+TOP_FEATURES_FILE = "exports/feature_importances.json"
 TOP_N_FEATURES = 15
 
 logger = get_logger("train_model")
@@ -215,7 +215,7 @@ def parse_args():
                         help="Optional list of target variables")
     parser.add_argument("--data_dir", type=str, default="src/data/raw",
                         help="Directory containing CSV input data")
-    parser.add_argument("--output_stats", type=str, default="model_stats.csv",
+    parser.add_argument("--output_stats", type=str, default="metrics/model_stats.csv",
                         help="Path to output stats file")
     return parser.parse_args()
 
