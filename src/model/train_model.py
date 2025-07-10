@@ -14,6 +14,8 @@ import argparse
 import os
 import glob
 import json
+import mlflow
+import mlflow.sklearn
 
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
@@ -84,7 +86,7 @@ def train_model(df: pd.DataFrame, strategy: str, target_name: str) -> dict:
     """
     
     ## === Step 1: Feature engineering ===
-    df = create_features(df, target_name, strategy)
+    df = create_features(df,  strategy, target_name)
 
     ## === Step 2: Optional outlier filtering (for regression targets only) ===
     if FILTER_STANDARD_INCIDENTS and target_name in ["incident_duration_min"]:
@@ -146,6 +148,7 @@ def train_model(df: pd.DataFrame, strategy: str, target_name: str) -> dict:
     if target_name in ["incident_duration_min"]:
         y_test = np.expm1(y_test)
         y_pred = np.expm1(y_pred)
+        
 
     ## === Step 12: Save top features for reuse (always executed) ===
     importances = model.feature_importances_
@@ -194,6 +197,29 @@ def train_model(df: pd.DataFrame, strategy: str, target_name: str) -> dict:
     joblib.dump(model, model_path)
     result["model_path"] = model_path
     logger.info(f"Model saved to {model_path}")
+
+    ## === Step 15: Log MLflow tracking ===
+    with mlflow.start_run(run_name=f"{strategy}_{target_name}"):
+
+        ## Log main parameters
+        mlflow.log_param("strategy", strategy)
+        mlflow.log_param("target", target_name)
+        mlflow.log_param("model_type", result["model_type"])
+        mlflow.log_param("top_features", USE_TOP_FEATURES_ONLY)
+        mlflow.log_param("filtered_outliers", FILTER_STANDARD_INCIDENTS)
+
+        ## Log metrics
+        for key in ["value", "mae", "r2", "medae"]:
+            if key in result:
+                mlflow.log_metric(key, result[key])
+
+        ## Log model artifact
+        mlflow.sklearn.log_model(model, artifact_path="model")
+
+        ## Log trained feature file and importance JSON as artifacts
+        mlflow.log_artifact(feature_path)
+        if os.path.exists(TOP_FEATURES_FILE):
+            mlflow.log_artifact(TOP_FEATURES_FILE)
 
     return result
 
@@ -263,3 +289,6 @@ if __name__ == "__main__":
         logger.info(f"Model stats saved to {args.output_stats}")
     else:
         logger.warning("No models were successfully trained.")
+
+    if results:
+        pd.DataFrame(results).to_csv("models/metrics.csv", index=False)

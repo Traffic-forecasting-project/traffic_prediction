@@ -162,18 +162,22 @@ def advanced_create_features(df: pd.DataFrame, selected_features: list = None) -
         Generate advanced features to improve prediction
         Only used when enable_extra_features is True
 
-        Args:
-            df : pd.DataFrame
-                DataFrame containing raw or partially processed input features
-            selected_features : list
-                List of feature names to generate. Valid options include:
-                ['delay_before_start', 'time_until_end', 'minutes_since_last_report',
-                 'weekday_flags', 'hour_x_jam', 'time_period']
+        Parameters:
+        -----------
+        df : pd.DataFrame
+            DataFrame containing raw or partially processed input features
+        selected_features : list
+            List of feature names to generate. Valid options include:
+            ['delay_before_start', 'time_until_end', 'minutes_since_last_report',
+             'weekday_flags', 'hour_x_jam', 'time_period']
 
         Returns:
-            pd.DataFrame
-                DataFrame with new engineered features
+        --------
+        pd.DataFrame
+            DataFrame with new engineered features
     """
+
+    import pandas as pd
 
     if selected_features is None:
         selected_features = [
@@ -373,19 +377,19 @@ def advanced_create_features(df: pd.DataFrame, selected_features: list = None) -
     return df
 
 @log_execution_time_and_path
-def create_features(df: pd.DataFrame, target: str, strategy: str) -> pd.DataFrame:
+def create_features(df: pd.DataFrame, strategy: str, target_column: str = "incident_duration_min") -> pd.DataFrame:
     """
-        Generate target-specific and general features for the model
+        Create additional features from the input DataFrame based on the selected strategy
 
         Args:
-            df (pd.DataFrame): Raw input dataframe
-            target (str): Target variable name
-            strategy (str): Analysis strategy
+            df (pd.DataFrame): Input data.
+            strategy (str): Feature engineering strategy ('incident_analysis', etc.)
+            target_column (str, optional): Column name to use as the target. Defaults to "incident_duration_min"
 
         Returns:
-            pd.DataFrame: Feature-enhanced dataframe
+            pd.DataFrame: DataFrame with new features added
     """
-  
+
     logger.info(f"Create new features, including target variable.")
   
     df = df.copy()
@@ -395,9 +399,13 @@ def create_features(df: pd.DataFrame, target: str, strategy: str) -> pd.DataFram
     df["start_time"] = pd.to_datetime(df.get("start_time"), errors="coerce")
     df["end_time"] = pd.to_datetime(df.get("end_time"), errors="coerce")
 
-    ## Create basic time-based features for temporal modeling
+    if not pd.api.types.is_datetime64_any_dtype(df["timestamp"]):
+        df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+
     df["hour"] = df["timestamp"].dt.hour
     df["weekday"] = df["timestamp"].dt.weekday
+
+    ## Create basic time-based features for temporal modeling
     df["is_weekend"] = df["weekday"] >= 5
 
     ## Estimate a pseudo-arrondissement by binning latitude (approximate spatial location)
@@ -405,7 +413,7 @@ def create_features(df: pd.DataFrame, target: str, strategy: str) -> pd.DataFram
         df["arrondissement"] = pd.cut(df["latitude"], bins=20, labels=False)
 
     ## ---------- Target-specific logic ---------- #
-    if target == "jam_factor":
+    if target_column  == "jam_factor":
         
         ## If jam_factor is missing, we generate synthetic uniform values as fallback
         if "jam_factor" not in df.columns or df["jam_factor"].isna().all():
@@ -413,8 +421,8 @@ def create_features(df: pd.DataFrame, target: str, strategy: str) -> pd.DataFram
         else:
             ## Otherwise, impute missing values using mean
             df["jam_factor"] = df["jam_factor"].fillna(df["jam_factor"].mean())
-            
-    elif target == "incident_duration_min":
+
+    elif target_column  == "incident_duration_min":
         
         ## Ensure that datetime fields are properly parsed
         df["start_time"] = pd.to_datetime(df["start_time"], errors="coerce")
@@ -432,7 +440,7 @@ def create_features(df: pd.DataFrame, target: str, strategy: str) -> pd.DataFram
         df = df[df["incident_duration_min"].notna() & (df["incident_duration_min"] > 0)]
         df = df[df["incident_duration_min"] < 180]
 
-    elif target == "mean_magnitude":
+    elif target_column  == "mean_magnitude":
         
         ## Parse 'incident_magnitudes' and compute mean
         df["mean_magnitude"] = df["incident_magnitudes"].apply(lambda x: np.nanmean(safe_eval(x)) if safe_eval(x) else np.nan)
@@ -455,7 +463,11 @@ def create_features(df: pd.DataFrame, target: str, strategy: str) -> pd.DataFram
     
     ## Detect potential data leakage by identifying features too correlated with the target (potential data leakage/overfitting)
     ## If drop=True, those features are automatically removed from the dataset    
-    df = detect_leakage(df, target_column=target, drop=True)    
+    df = detect_leakage(df, target_column=target_column , drop=True)    
+    
+    if target_column not in df.columns:
+        logger.error(f"Target '{target_column}' missing from DataFrame. Available columns: {df.columns.tolist()}")
+        raise ValueError(f"Target '{target_column}' not found in DataFrame.")
 
     logger.info(f"Feature set finalized with {df.shape[1]} columns after leakage control.")
     
