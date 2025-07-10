@@ -1,0 +1,11 @@
+stages:
+  train:
+    cmd: src/model/train_model.py
+    deps:
+    - data/raw
+    - src/model/train_model.py
+    outs:
+    - exports
+    - models
+    metrics:
+    - model_stats.csv
