@@ -1,0 +1,3 @@
+strategy,target,model_type,metric,value,mae,r2,medae,model_path
+incident_analysis,incident_duration_min,regressor,rmse,5.312689078047396,2.9916334243273415,0.9060961700523813,1.6785644568061429,models/model_incident_analysis_incident_duration_min.joblib
+incident_analysis,mean_magnitude,regressor,rmse,0.017562887991124293,0.0005707148347425057,0.9998511345406482,0.0,models/model_incident_analysis_mean_magnitude.joblib
