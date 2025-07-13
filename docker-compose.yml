@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  data_collector:
+    build:
+      context: .
+    env_file:
+      - ./.env
+    volumes:
+      - ./live:/home/appuser/app/live
+      - ./logs:/home/appuser/app/logs
+    networks:
+      - net
+
+networks:
+  net:
