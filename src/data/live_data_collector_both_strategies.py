@@ -29,10 +29,18 @@ from dotenv import load_dotenv
 import argparse
 import random
 from zoneinfo import ZoneInfo   
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+import hydra
+from omegaconf import DictConfig
+import os
+import logging
 ## Ensure UTF-8 encoding for console output
 sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
 load_dotenv()
 
+TOMTOM_KEY = os.getenv("TOMTOM_API_KEY")
+WEATHER_KEY = os.getenv("WEATHER_API_KEY")
 
 ## Create folders for data and logs
 os.makedirs('live', exist_ok=True)
@@ -58,6 +66,8 @@ DELTA_BBOX = 0.01 ## range value for bbox over a random point of the original 'a
 MAX_CALLS_PER_DAY = 2500  ## Daily limit for weather API
 CALL_DELAY_SECONDS = 10   ## Delay between any API calls to avoid rate limits
 
+arrondissement = None
+strategy = None
 calls_today = 0  ## Counter for total API calls (weather)
 last_weather_time = None  ## Last time weather was fetched
 last_weather_data = None  ## Cached result if shared
@@ -74,6 +84,17 @@ console_handler = logging.StreamHandler()
 console_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
 logger.addHandler(console_handler)
 
+# Automatic retry 
+session = requests.Session()
+retries = Retry(
+    total=3,
+    backoff_factor=2,
+    status_forcelist=[500, 502, 503, 504],
+    allowed_methods=["GET"]
+)
+session.mount("https://", HTTPAdapter(max_retries=retries))
+
+
 def safe_request(url, params):
     """
         Makes a safe API request with delay and call counter.
@@ -88,7 +109,8 @@ def safe_request(url, params):
     time.sleep(CALL_DELAY_SECONDS)
 
     try:
-        r = requests.get(url, params=params, timeout=15)
+        r = session.get(url, params=params, timeout=15)
+
         r.raise_for_status()  # Raise exception on 4xx or 5xx
         calls_today += 1
         return r
@@ -771,14 +793,13 @@ def parse_arguments():
                         
     return parser.parse_args()
 
-if __name__ == "__main__":
-    args = parse_arguments()
-    arrondissement = args.arrondissement
-    ## Load API keys (can be hardcoded or pulled from .env)
-    TOMTOM_KEY = os.getenv("TOMTOM_KEY_{}".format(arrondissement))
-    WEATHER_KEY = os.getenv("WEATHER_KEY_{}".format(arrondissement))
-    
-    STRATEGY = args.strategy
+@hydra.main(config_path="../../config", config_name="config", version_base=None)
+def main(cfg: DictConfig):
+
+    global arrondissement, strategy  # Tell Python to use the global ones
+
+    arrondissement = cfg.collector.arrondissement
+    strategy = cfg.collector.strategy
 
     ## Load list of coordinates from the specified arrondissement
     df_arr = pd.read_csv(ARRONDISSEMENTS_PATH)
@@ -842,3 +863,6 @@ if __name__ == "__main__":
 
     logging.info(f"=== FINISHED: {success_count} rows collected in total ===")
     print(f"Finished collecting {success_count} live entries.")
+
+if __name__ == "__main__":
+    main()
