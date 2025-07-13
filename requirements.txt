@@ -1,0 +1,14 @@
+# Core
+pandas
+requests==2.31.0
+python-dotenv==1.0.1
+
+# Logging et retry
+urllib3==2.2.1
+
+# YAML-based config
+hydra-core==1.3.2
+omegaconf==2.3.0
+
+# Optionnel (si CSV contient des géométries au format JSON)
+# json handled nativement
