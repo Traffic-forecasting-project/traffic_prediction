@@ -292,3 +292,10 @@ if __name__ == "__main__":
 
     if results:
         pd.DataFrame(results).to_csv("models/metrics.csv", index=False)
+        
+    ## Attempt to run EDA after training
+    if EDA_ENABLED == True:
+        try:
+            import eda_all
+        except Exception as e:
+            logger.warning(f"EDA script execution failed: {e}")
