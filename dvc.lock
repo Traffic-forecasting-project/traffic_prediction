@@ -1,0 +1,29 @@
+schema: '2.0'
+stages:
+  train:
+    cmd: python src/model/train_model.py
+    deps:
+    - path: src/data/raw
+      hash: md5
+      md5: 3d9cc43759ea061bf6722743f6045d68.dir
+      size: 20466579
+      nfiles: 7
+    - path: src/model/train_model.py
+      hash: md5
+      md5: 1b468b3f492320fa13314d5a6c45f12e
+      size: 12135
+    outs:
+    - path: exports
+      hash: md5
+      md5: ae0c71e1cf509a52cead9a9778aaa792.dir
+      size: 81969701
+      nfiles: 4
+    - path: metrics/model_stats.csv
+      hash: md5
+      md5: ae7c32456a69c6ada191cbddc04bae39
+      size: 595
+    - path: models
+      hash: md5
+      md5: 68004b334565609907d16751bf08533b.dir
+      size: 344024598
+      nfiles: 4
