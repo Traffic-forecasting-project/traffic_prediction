@@ -13,7 +13,9 @@ import sys
 import os
 import io
 from dotenv import load_dotenv
+
 from src.data.live_data_collector import run_live_data_pipeline
+from src.data.prepare_data import run_prepare_data_pipeline
 from src.core.logging_utils import get_logger
 
 ## Ensure UTF-8 encoding for console output
@@ -28,9 +30,10 @@ logger = get_logger(__name__)
 ## Ensure logs directory exists
 os.makedirs("logs", exist_ok=True)
 
-## Ensure live directory exists
+## Ensure live, processed directory exists
 os.makedirs("data", exist_ok=True)
 os.makedirs("data/live", exist_ok=True)
+os.makedirs("data/processed", exist_ok=True)
 
 ## Valid parameters
 VALID_STRATEGIES = ["traffic_analysis", "incident_analysis"]
@@ -38,26 +41,35 @@ VALID_ARRONDISSEMENTS = list(range(1, 21))
 
 def parse_arguments() -> argparse.Namespace:
     """
-        Parse command-line arguments for arrondissement and strategy (optional)
+        Parse optional arguments (used only for validation)
     """
     
-    parser = argparse.ArgumentParser(description="Traffic Data Collector CLI")
-    parser.add_argument("-a", "--arrondissement", type=int, help="Paris arrondissement (1-20)")
-    parser.add_argument("-s", "--strategy", type=str, help="Strategy: 'traffic_analysis' or 'incident_analysis'")
-    
+    parser = argparse.ArgumentParser(description="Traffic Pipeline CLI")
+    parser.add_argument("-a", "--arrondissement", type=int, help="Paris arrondissement (1–20)")
+    parser.add_argument("-s", "--strategy", type=str, help="Data collection strategy")
+    parser.add_argument("-p", "--prepare", action="store_true", help="Run feature engineering pipeline")
     return parser.parse_args()
 
 def main():
     """
-        Main entrypoint to control flow depending on user selection
-        Defaults to arrondissement=17 and strategy='incident_analysis' for option 1
+        Main menu-based CLI logic
     """
     
     args = parse_arguments()
 
-    ## Display main menu
+    ## If any invalid arguments were passed, inform and exit
+    if args.arrondissement is not None and args.arrondissement not in VALID_ARRONDISSEMENTS:
+        logger.error(f"Invalid arrondissement '{args.arrondissement}'. Must be between 1 and 20.")
+        sys.exit(1)
+
+    if args.strategy is not None and args.strategy not in VALID_STRATEGIES:
+        logger.error(f"Invalid strategy '{args.strategy}'. Choose from {VALID_STRATEGIES}.")
+        sys.exit(1)
+
+    ## Display menu
     print("=== TRAFFIC LIVE DATA MENU ===")
     print("1. Run live data collection (default values)")
+    print("2. Run feature engineering on collected data")
     print("q. Quit")
     print("==============================")
     choice = input("Select an option: ").strip().lower()
@@ -67,22 +79,20 @@ def main():
         sys.exit(0)
 
     elif choice == "1":
-        arrondissement = args.arrondissement if args.arrondissement else 17
-        strategy = args.strategy if args.strategy else "incident_analysis"
-
-        ## Check validity of inputs
-        if arrondissement not in VALID_ARRONDISSEMENTS:
-            logger.error(f"Invalid arrondissement: {arrondissement}. Must be between 1 and 20.")
-            sys.exit(1)
-        if strategy not in VALID_STRATEGIES:
-            logger.error(f"Invalid strategy: '{strategy}'. Must be one of: {VALID_STRATEGIES}")
-            sys.exit(1)
-
+        ## Use defaults (arrondissement 17, incident_analysis) regardless of CLI args
+        arrondissement = 17
+        strategy = "incident_analysis"
         logger.info(f"Running live collection with arrondissement={arrondissement}, strategy='{strategy}'")
         run_live_data_pipeline(arrondissement=arrondissement, strategy=strategy)
 
+    elif choice == "2":
+        ## Use strategy passed if valid, else default
+        strategy = args.strategy if args.strategy in VALID_STRATEGIES else "incident_analysis"
+        logger.info(f"Running feature engineering pipeline with strategy='{strategy}'")
+        run_prepare_data_pipeline(strategy)
+
     else:
-        logger.warning("Invalid menu option. Please choose '1' or 'q'.")
+        logger.warning(f"Invalid menu option '{choice}'. Please choose '1', '2' or 'q'.")
         sys.exit(1)
 
 
