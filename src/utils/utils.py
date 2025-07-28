@@ -51,6 +51,27 @@ def convert_to_local_timezone(api_time):
     dt_paris = time_utc.astimezone(ZoneInfo("Europe/Paris"))
     return dt_paris
 
+def save_summary_stats(df: pd.DataFrame, label: str, output_path: str) -> None:
+    """
+        Save summary statistics (mean, std, missing values, etc.) of a DataFrame to a CSV file
+
+        Args:
+            df (pd.DataFrame): Input data
+            label (str): Dataset label for identification
+            output_path (str): Path to output CSV file
+    """
+    
+    ## Compute basic descriptive statistics
+    desc = df.describe(include='all').transpose()
+
+    ## Add missing value metrics
+    desc["missing_count"] = df.isnull().sum()
+    desc["missing_ratio"] = df.isnull().mean()
+    desc["dataset"] = label
+
+    ## Save to CSV, append if already exists
+    desc.to_csv(output_path, mode='a', header=not os.path.exists(output_path))
+
 def save_csv(df_row, arrondissement, strategy):
     """
         Save a single row of collected data into a CSV file named after strategy and district

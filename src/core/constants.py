@@ -9,6 +9,7 @@ __desc__ = Global constants for live data collection and model pipeline
 
 import os
 from dotenv import load_dotenv
+from typing import List
 
 ## Load environment variables from .env file
 load_dotenv()
@@ -18,6 +19,7 @@ load_dotenv()
 ## ========================
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 DATA_DIR = os.path.join(BASE_DIR, "data")
+EDA_OUTPUT_DIR = os.path.join(BASE_DIR, "eda")
 RAW_DATA_DIR = os.path.join(DATA_DIR, "raw")
 LIVE_DATA_DIR = os.path.join(DATA_DIR, "live")
 PROCESSED_DATA_DIR = os.path.join(DATA_DIR, "processed")
@@ -66,6 +68,11 @@ USE_TOP_FEATURES_ONLY = os.getenv("USE_TOP_FEATURES_ONLY", "false").lower() == "
 ENABLE_EXTRA_FEATURES =  os.getenv("ENABLE_EXTRA_FEATURES", "false").lower() == "true"       ## Enable creation of extra feature to make more descriptive model
 EDA_ENABLED = os.getenv("EDA_ENABLED", "false").lower() == "true"  
 TOP_N_FEATURES = int(os.getenv("TOP_N_FEATURES", 15))  
+TARGETS: List[str] = [ ## List of target columns
+    "jam_factor",
+    "incident_duration_min",
+    "mean_magnitude"
+]
 TARGET_METADATA = { ## Mapping of all supported targets with allowed strategies
     "jam_factor": {"strategies": ["traffic_analysis", "incident_analysis"]},
     "incident_duration_min": {"strategies": ["incident_analysis"]},

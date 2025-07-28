@@ -16,6 +16,8 @@ from dotenv import load_dotenv
 
 from src.data.live_data_collector import run_live_data_pipeline
 from src.data.prepare_data import run_prepare_data_pipeline
+from src.eda.eda_analysis import run_eda_pipeline
+
 from src.core.logging_utils import get_logger
 
 ## Ensure UTF-8 encoding for console output
@@ -34,6 +36,7 @@ os.makedirs("logs", exist_ok=True)
 os.makedirs("data", exist_ok=True)
 os.makedirs("data/live", exist_ok=True)
 os.makedirs("data/processed", exist_ok=True)
+os.makedirs("eda", exist_ok=True)
 
 ## Valid parameters
 VALID_STRATEGIES = ["traffic_analysis", "incident_analysis"]
@@ -70,6 +73,8 @@ def main():
     print("=== TRAFFIC LIVE DATA MENU ===")
     print("1. Run live data collection (default values)")
     print("2. Run feature engineering on collected data")
+    print("3. Run EDA analysis on data")
+
     print("q. Quit")
     print("==============================")
     choice = input("Select an option: ").strip().lower()
@@ -90,6 +95,12 @@ def main():
         strategy = args.strategy if args.strategy in VALID_STRATEGIES else "incident_analysis"
         logger.info(f"Running feature engineering pipeline with strategy='{strategy}'")
         run_prepare_data_pipeline(strategy)
+    
+    elif choice == "3":
+        ## Use strategy passed if valid, else default
+        strategy = args.strategy if args.strategy in VALID_STRATEGIES else "incident_analysis"
+        logger.info(f"Running EDA analysis pipeline with strategy='{strategy}'")
+        run_eda_pipeline(strategy)
 
     else:
         logger.warning(f"Invalid menu option '{choice}'. Please choose '1', '2' or 'q'.")
