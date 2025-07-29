@@ -151,6 +151,22 @@ def load_and_merge_files(strategy: str, data_dir: str) -> pd.DataFrame:
     ## Concatenate all loaded DataFrames into one
     return pd.concat(dfs, ignore_index=True)
 
+    # ## Build the glob pattern to match all CSV files related to the strategy
+    # pattern = os.path.join(data_dir, f"live_data_{strategy}.*.csv")
+    
+    # ## Find all files matching the pattern and rase an error if no files found
+    # file_list = glob.glob(pattern)
+    # if not file_list:
+        # raise FileNotFoundError(f"No files found for strategy '{strategy}' in {data_dir}")
+    
+    # ## Read all CSV files into separate DataFrames, concatenate and drop duplicate rows
+    # dfs = [pd.read_csv(f, low_memory=False) for f in file_list]
+    # df = pd.concat(dfs, ignore_index=True).drop_duplicates()
+    
+    # logger.info(f"Loaded {len(df)} rows from {len(file_list)} file(s) for strategy '{strategy}'")
+    
+    # return df
+
 def clean_columns_and_rows(df: pd.DataFrame, threshold: float = 0.9) -> pd.DataFrame:
     """
         Clean dataset by dropping columns and rows with too many missing values

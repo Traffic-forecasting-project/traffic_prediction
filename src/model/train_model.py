@@ -10,9 +10,7 @@ __desc__ = "Training script for predictive modeling with optional outlier filter
 import pandas as pd
 import numpy as np
 import joblib
-import argparse
 import os
-import glob
 import json
 import mlflow
 import mlflow.sklearn
@@ -22,58 +20,37 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import (
     accuracy_score,
-    root_mean_squared_error,
+    #root_mean_squared_error,
+    mean_squared_error,    
     mean_absolute_error,
     r2_score,
     median_absolute_error,
     classification_report,
     confusion_matrix,
 )
-
 from imblearn.over_sampling import SMOTE
-from prepare_data import create_features, create_target, TARGET_METADATA
-from logging_utils import get_logger, log_execution_time_and_path
 
-## ========== Global Configurations ==========
-FILTER_STANDARD_INCIDENTS = True   ## Filter out extreme outliers for regression targets
-USE_TOP_FEATURES_ONLY = True      ## Restrict to top features if previous importances exist
-EDA_ENABLED = True
-TOP_FEATURES_FILE = "exports/feature_importances.json"
-TOP_N_FEATURES = 15
+from src.data.prepare_data import create_features, TARGET_METADATA
+from src.core.logging_utils import get_logger, log_execution_time_and_path
+
+from src.utils.utils import (
+    load_and_merge_files,
+    create_target
+)
+
+from src.core.constants import (
+    PROCESSED_DATA_DIR,
+    MODELS_DIR,
+    FILTER_STANDARD_INCIDENTS,
+    USE_TOP_FEATURES_ONLY,
+    TOP_FEATURES_FILE,
+    TOP_N_FEATURES 
+)
 
 logger = get_logger("train_model")
 
 @log_execution_time_and_path
-def load_and_merge_files(data_dir: str, strategy: str) -> pd.DataFrame:
-    """
-        Load all CSV files matching a given strategy pattern from a folder
-
-        Args:
-            data_dir (str): Path to data directory
-            strategy (str): Name of the strategy (e.g., "incident_analysis")
-
-        Returns:
-            pd.DataFrame: Concatenated and deduplicated DataFrame
-    """
-    
-    ## Build the glob pattern to match all CSV files related to the strategy
-    pattern = os.path.join(data_dir, f"live_data_{strategy}.*.csv")
-    
-    ## Find all files matching the pattern and rase an error if no files found
-    file_list = glob.glob(pattern)
-    if not file_list:
-        raise FileNotFoundError(f"No files found for strategy '{strategy}' in {data_dir}")
-    
-    ## Read all CSV files into separate DataFrames, concatenate and drop duplicate rows
-    dfs = [pd.read_csv(f, low_memory=False) for f in file_list]
-    df = pd.concat(dfs, ignore_index=True).drop_duplicates()
-    
-    logger.info(f"Loaded {len(df)} rows from {len(file_list)} file(s) for strategy '{strategy}'")
-    
-    return df
-
-@log_execution_time_and_path
-def train_model(df: pd.DataFrame, strategy: str, target_name: str) -> dict:
+def train_model(df: pd.DataFrame, strategy: str, target_name: str, data_dir_output: str = "data/processed") -> dict:
     """
         Train a model (classification or regression) for the given target variable.
         
@@ -87,8 +64,9 @@ def train_model(df: pd.DataFrame, strategy: str, target_name: str) -> dict:
     """
     
     ## === Step 1: Feature engineering ===
-    df = create_features(df,  strategy, target_name)
-
+    result = create_features(df, data_dir_output, strategy, target_name)
+    (df, feature_path) = (result[0], result[1])
+    
     ## === Step 2: Optional outlier filtering (for regression targets only) ===
     if FILTER_STANDARD_INCIDENTS and target_name in ["incident_duration_min"]:
         threshold = df[target_name].quantile(0.95)
@@ -97,8 +75,6 @@ def train_model(df: pd.DataFrame, strategy: str, target_name: str) -> dict:
         logger.info(f"\t Filtered extreme values for {target_name} < 95th percentile ({threshold:.2f}). Rows: {original_len} -> {len(df)}")
 
     ## === Step 3: Save processed DataFrame ===
-    os.makedirs("exports", exist_ok=True)
-    feature_path = f"exports/df_features_{strategy}_{target_name}.csv"
     df.to_csv(feature_path, index=False)
     logger.info(f"\t Saved feature-engineered DataFrame to {feature_path}")
 
@@ -150,7 +126,6 @@ def train_model(df: pd.DataFrame, strategy: str, target_name: str) -> dict:
         y_test = np.expm1(y_test)
         y_pred = np.expm1(y_pred)
         
-
     ## === Step 12: Save top features for reuse (always executed) ===
     importances = model.feature_importances_
     feature_names = list(X_imputed.columns)
@@ -182,7 +157,8 @@ def train_model(df: pd.DataFrame, strategy: str, target_name: str) -> dict:
         logger.info(f"\t\t[{strategy}] Confusion matrix:\n{matrix}")
         result.update({"metric": "accuracy", "value": acc})
     else:
-        rmse = root_mean_squared_error(y_test, y_pred)
+        #rmse = root_mean_squared_error(y_test, y_pred)
+        rmse = mean_squared_error(y_test, y_pred)
         mae = mean_absolute_error(y_test, y_pred)
         medae = median_absolute_error(y_test, y_pred)
         r2 = r2_score(y_test, y_pred)
@@ -193,8 +169,7 @@ def train_model(df: pd.DataFrame, strategy: str, target_name: str) -> dict:
         result.update({"metric": "rmse", "value": rmse, "mae": mae, "r2": r2, "medae": medae})
 
     ## === Step 14: Save trained model ===
-    os.makedirs("models", exist_ok=True)
-    model_path = f"models/model_{strategy}_{target_name}.joblib"
+    model_path = f"{MODELS_DIR}/model_{strategy}_{target_name}.joblib"
     joblib.dump(model, model_path)
     result["model_path"] = model_path
     logger.info(f"Model saved to {model_path}")
@@ -224,79 +199,47 @@ def train_model(df: pd.DataFrame, strategy: str, target_name: str) -> dict:
 
     return result
 
-@log_execution_time_and_path
-def parse_args():
+def run_train_model_pipeline(strategy: str, data_dir_input: str = "data/live", data_dir_stats: str = "metrics") -> None:
     """
-        Parse CLI arguments for strategy, target, input folder, and output path
+        Run the live data collection loop using the specified strategy
 
-        Returns:
-            argparse.Namespace: Parsed arguments
+        Args:
+            strategy (str): 'traffic_analysis' or 'incident_analysis'
+            data_dir_input (str): path to live data collected, by default "data/live"
+            data_dir_stats (str): path to produced stats, by default "metrics"            
     """
     
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--strategy", type=str, default="incident_analysis",
-                        choices=["incident_analysis", "traffic_analysis", "all"],
-                        help="Training strategy to use")
-    parser.add_argument("--targets", nargs="*", default=[],
-                        help="Optional list of target variables")
-    parser.add_argument("--data_dir", type=str, default="src/data/raw",
-                        help="Directory containing CSV input data")
-    parser.add_argument("--output_stats", type=str, default="metrics/model_stats.csv",
-                        help="Path to output stats file")
-    return parser.parse_args()
-
-if __name__ == "__main__":
-
-    args = parse_args()
-    strategies = [args.strategy] if args.strategy != "all" else ["incident_analysis", "traffic_analysis"]
     results = []
+    logger.info(f"STRATEGY : {strategy} \n")
 
-    ## Loop through each selected strategy
-    for strategy in strategies:
+    try:
+        ## Load and merge the CSV files for the given strategy
+        df = load_and_merge_files(strategy, data_dir_input)
 
-        logger.info(f"STRATEGY : {strategy} \n")
+        ## Determine the default targets allowed for this strategy, either default or user provided
+        selected_targets = [t for t, meta in TARGET_METADATA.items() if strategy in meta["strategies"]]
 
-        try:
-            ## Load and merge the CSV files for the given strategy
-            df = load_and_merge_files(args.data_dir, strategy)
+        ## Filter valid targets for the current strategy, and return error if no valid targets
+        targets = [t for t in selected_targets if strategy in TARGET_METADATA.get(t, {}).get("strategies", [])]
+        if not targets:
+            logger.warning(f"No valid targets for strategy '{strategy}'. Skipping.")
 
-            ## Determine the default targets allowed for this strategy, either default or user provided
-            default_targets = [t for t, meta in TARGET_METADATA.items() if strategy in meta["strategies"]]
-            selected_targets = args.targets if args.targets else default_targets
+        ## Loop through each target and train the model
+        for target in targets:
 
-            ## Filter valid targets for the current strategy, and return error if no valid targets
-            targets = [t for t in selected_targets if strategy in TARGET_METADATA.get(t, {}).get("strategies", [])]
-            if not targets:
-                logger.warning(f"No valid targets for strategy '{strategy}'. Skipping.")
-                continue
+            logger.info(f"\t TARGET : {target} \n")
+            try:
+                result = train_model(df, strategy, target)
+                results.append(result)
+            except Exception as e:
+                logger.warning(f"Error during training for target '{target}': {e}")
 
-            ## Loop through each target and train the model
-            for target in targets:
-
-                logger.info(f"\t TARGET : {target} \n")
-                try:
-                    result = train_model(df, strategy, target)
-                    results.append(result)
-                except Exception as e:
-                    logger.warning(f"Error during training for target '{target}': {e}")
-
-
-        except Exception as e:
-            logger.warning(f"Error while processing strategy '{strategy}': {e}")
+    except Exception as e:
+        logger.warning(f"Error while processing strategy '{strategy}': {e}")
 
     ## If training was successful, save stats to CSV
     if results:
-        pd.DataFrame(results).to_csv(args.output_stats, index=False)
-        logger.info(f"Model stats saved to {args.output_stats}")
+        pd.DataFrame(results).to_csv(f"{data_dir_stats}/metrics.csv", index=False)
+        logger.info(f"Model stats saved to {data_dir_stats}")
     else:
-        logger.warning("No models were successfully trained.")
-
-    if results:
-        pd.DataFrame(results).to_csv("models/metrics.csv", index=False)
-        
-    ## Attempt to run EDA after training
-    if EDA_ENABLED == True:
-        try:
-            import eda_all
-        except Exception as e:
-            logger.warning(f"EDA script execution failed: {e}")
+        logger.warning("No models were successfully trained.")        

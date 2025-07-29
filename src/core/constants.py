@@ -19,6 +19,7 @@ load_dotenv()
 ## ========================
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 DATA_DIR = os.path.join(BASE_DIR, "data")
+MODELS_DIR = os.path.join(BASE_DIR, "model")
 EDA_OUTPUT_DIR = os.path.join(BASE_DIR, "eda")
 RAW_DATA_DIR = os.path.join(DATA_DIR, "raw")
 LIVE_DATA_DIR = os.path.join(DATA_DIR, "live")
