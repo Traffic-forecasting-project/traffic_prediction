@@ -15,6 +15,13 @@ from typing import List
 load_dotenv()
 
 ## ========================
+## SECURITY CONSTANTS
+## ========================
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = os.getenv("ALGORITHM", "HS256")
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
+
+## ========================
 ## BASE DIRECTORIES
 ## ========================
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
@@ -27,11 +34,17 @@ PROCESSED_DATA_DIR = os.path.join(DATA_DIR, "processed")
 RESOURCES_DIR = os.path.join(BASE_DIR, "resources")
 
 ## ========================
+## AUTHORIZATION DUMMY USERS
+## ========================
+FAKE_USERS_DB = {"admin": {"username": "admin", "password": "adminpass"}}
+
+## ========================
 ## FILE PATHS
 ## ========================
 ARRONDISSEMENTS_PATH = os.path.join(RAW_DATA_DIR, "arrondissements.csv")
 CSV_PATH = os.path.join(LIVE_DATA_DIR, "live_data.csv")
 TOP_FEATURES_FILE = os.path.join(PROCESSED_DATA_DIR, "feature_importances.json" )
+MODEL_PATH = os.path.join(MODELS_DIR, "model_incident_analysis_incident_duration_min.joblib" )
 
 ## ========================
 ## API KEYS

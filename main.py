@@ -18,7 +18,9 @@ from src.data.live_data_collector import run_live_data_pipeline
 from src.data.prepare_data import run_prepare_data_pipeline
 from src.eda.eda_analysis import run_eda_pipeline
 from src.model.train_model import run_train_model_pipeline
+from src.core.service import run_fastapi_service_pipeline
 
+from src.core.constants import MODEL_PATH
 from src.core.logging_utils import get_logger
 
 ## Ensure UTF-8 encoding for console output
@@ -52,6 +54,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("-a", "--arrondissement", type=int, help="Paris arrondissement (1–20)")
     parser.add_argument("-s", "--strategy", type=str, default="incident_analysis", choices=["incident_analysis", "traffic_analysis", "all"], help="Data/train collection strategy")
     parser.add_argument("-p", "--prepare", action="store_true", help="Run feature engineering pipeline")
+    parser.add_argument("-t", "--train", action="store_true", help="Train model with prepared dat")   
     parser.add_argument( "--targets", nargs="*", default=[], help="Optional list of target variables")
     parser.add_argument("--data_dir", type=str, default="src/data/live", help="Directory containing CSV collected data")
     parser.add_argument("--output_stats", type=str, default="metrics", help="Path to output stats file")                     
@@ -79,6 +82,7 @@ def main():
     print("2. Run feature engineering on collected data")
     print("3. Run EDA analysis on data")
     print("4. Run train model on data")
+    print("5. Launch fastapi service with uvicorn")    
     print("q. Quit")
     print("==============================")
     choice = input("Select an option: ").strip().lower()
@@ -101,15 +105,17 @@ def main():
         run_prepare_data_pipeline(strategy)
     
     elif choice == "3":
-        ## Use strategy passed if valid, else default
         logger.info(f"Running EDA analysis pipeline with strategy='{strategy}'")
         run_eda_pipeline(strategy)
 
     elif choice == "4":
-        ## Use strategy passed if valid, else default
         logger.info(f"Running train model pipeline with strategy='{strategy}'")
         run_train_model_pipeline(strategy)
-        
+ 
+    elif choice == "5":
+        logger.info(f"Launch FastAPI uvicorn server for routes with trained model path ==> '{MODEL_PATH}'")
+        run_fastapi_service_pipeline(reload=True)
+         
     else:
         logger.warning(f"Invalid menu option '{choice}'. Please choose '1', '2' or 'q'.")
         sys.exit(1)
