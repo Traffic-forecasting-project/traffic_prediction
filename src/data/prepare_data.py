@@ -437,4 +437,4 @@ def run_prepare_data_pipeline(strategy: str, targets_input : list = None, data_d
                 logger.warning(f"Error during prepare data for target '{target_name}': {e}")
 
     except Exception as e:
-        logger.warning(f"Error while processing strategy '{strategy}': {e}")
+        logger.warning(f"Error while feature engineering strategy '{strategy}': {e}")

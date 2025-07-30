@@ -41,6 +41,7 @@ app = FastAPI(
     description="API to predict incident_duration_min with JWT protection.",
     version="1.0.0"
 )
+
 @app.post("/login", summary="Authenticate and return access token")
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     """
@@ -114,11 +115,11 @@ def build_full_feature_vector(input_data: IncidentFeatures) -> pd.DataFrame:
     ## Convert input data to DataFrame
     df = pd.DataFrame([input_data.dict()])
 
-    ## Derived features
+    ## Derived features (fix: use df[...] not df.get(...))
     df["log_length"] = np.log1p(df["length"])
-    df["length_x_jam"] = df["length"] * df.get("jam_factor", 1)  # fallback if jam_factor not provided
-    df["temp_x_slowdown"] = df["temp"] * (df.get("avg_speed", 1) / df.get("free_flow_speed", 1))
-    df["hour_x_jam"] = df["hour"] * df.get("jam_factor", 1)
+    df["length_x_jam"] = df["length"] * df["jam_factor"]
+    df["temp_x_slowdown"] = df["temp"] * (df["avg_speed"] / df["free_flow_speed"])
+    df["hour_x_jam"] = df["hour"] * df["jam_factor"]
     df["hour_x_delay"] = df["hour"] * df["delay_before_start"]
     df["weekday_x_length"] = df["weekday"] * df["length"]
     df["delay_per_km"] = df["delay_before_start"] / (df["length"] + 0.01)
@@ -130,6 +131,7 @@ def build_full_feature_vector(input_data: IncidentFeatures) -> pd.DataFrame:
     df = df[FEATURE_ORDER]
 
     return df
+
     
 @app.post("/predict", summary="Predict incident_duration_min")
 def predict(input_data: IncidentFeatures, username: str = Depends(verify_token)):
@@ -146,22 +148,35 @@ def predict(input_data: IncidentFeatures, username: str = Depends(verify_token))
         Raises:
             HTTPException: If prediction fails due to preprocessing or model errors
     """
-
+    
     logger.info(f"Received prediction request from user: {username}")
 
     try:
-        ## Step 1: Build the feature vector from raw input
-        features_df = build_full_feature_vector(input_data)
+        if isinstance(input_data, dict):
+            input_data = IncidentFeatures(**input_data)
 
-        ## Step 1b: Reorder columns to match training order
-        ## features_df = features_df[feature_order]
-        features_df = features_df[FEATURE_ORDER]
-
-        ## Step 2: Load the trained model
+        ## Step 1: Load the trained model
         logger.info(f"Loading model from: {MODEL_PATH}")
         model = joblib.load(MODEL_PATH)
 
-        ## Step 3: Make prediction
+        ## Step 2: Charger FEATURE_ORDER s’il est vide
+        if not FEATURE_ORDER:
+            try:
+                FEATURE_ORDER.extend(model.feature_names_in_)
+                logger.warning("FEATURE_ORDER was empty. Loaded from model during prediction.")
+            except Exception as e:
+                logger.error(f"Unable to load FEATURE_ORDER: {e}")
+                raise HTTPException(status_code=500, detail="Model feature order missing")
+
+        ## Step 3: Construire le vecteur d’entrée
+        features_df = build_full_feature_vector(input_data)
+        logger.debug(f"Features DataFrame before prediction:\n{features_df}")
+        logger.debug(f"DataFrame shape: {features_df.shape}")
+
+        ## Step 4: Réordonner les colonnes
+        features_df = features_df[FEATURE_ORDER]
+
+        ## Step 5: Prédire
         prediction = model.predict(features_df)[0]
         logger.info(f"Prediction completed: {prediction:.2f} minutes")
 
@@ -180,7 +195,7 @@ async def get_metrics():
             dict: Last row of metrics.csv
     """
     
-    metrics_path = "models/metrics.csv"
+    metrics_path = "metrics/metrics.csv"
     
     try:
         with open(metrics_path, mode="r") as f:
