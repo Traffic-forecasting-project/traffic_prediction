@@ -7,6 +7,7 @@ __status__ = "Dev"
 __desc__ = "Main CLI entry point for live data collection"
 '''
 
+import pytest
 import argparse
 import logging
 import sys
@@ -82,7 +83,8 @@ def main():
     print("2. Run feature engineering on collected data")
     print("3. Run EDA analysis on data")
     print("4. Run train model on data")
-    print("5. Launch fastapi service with uvicorn")    
+    print("5. Launch fastapi service with uvicorn") 
+    print("6. Run tests avec pytest")    
     print("q. Quit")
     print("==============================")
     choice = input("Select an option: ").strip().lower()
@@ -115,6 +117,11 @@ def main():
     elif choice == "5":
         logger.info(f"Launch FastAPI uvicorn server for routes with trained model path ==> '{MODEL_PATH}'")
         run_fastapi_service_pipeline(reload=True)
+
+    elif choice == "6":
+        logger.info("Running pytest on tests/")
+        retcode = pytest.main(["tests"])
+        sys.exit(retcode)
          
     else:
         logger.warning(f"Invalid menu option '{choice}'. Please choose '1', '2' or 'q'.")
