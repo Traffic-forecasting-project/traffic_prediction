@@ -1,4 +1,0 @@
-strategy,target,model_type,metric,value,mae,r2,medae,model_path
-incident_analysis,jam_factor,regressor,rmse,0.025381038128932262,0.008416641877349015,0.9427180415467542,2.220446049250313e-16,C:\Users\user\Desktop\mlops_tomtom_traffic\traffic_prediction\model/model_incident_analysis_jam_factor.joblib
-incident_analysis,incident_duration_min,regressor,rmse,279.2616914198865,9.772250913874048,0.5816322072209673,5.6995035453283975,C:\Users\user\Desktop\mlops_tomtom_traffic\traffic_prediction\model/model_incident_analysis_incident_duration_min.joblib
-incident_analysis,mean_magnitude,regressor,rmse,0.06913226454223158,0.09968338632826301,0.962343546045894,0.0,C:\Users\user\Desktop\mlops_tomtom_traffic\traffic_prediction\model/model_incident_analysis_mean_magnitude.joblib
