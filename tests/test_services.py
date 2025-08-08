@@ -215,7 +215,10 @@ def test_predict_internal_server_error(client_instance: TestClient, auth_token: 
         "wind": 4.0,
         "rain": 0.0,
         "hour": 8,
-        "weekday": 2
+        "weekday": 2,
+        "incident_count": 1,
+        "tmc_tableNumber": 100,
+        "tmc_tableVersion": 2
     }
 
     with patch("src.core.service.joblib.load") as mock_load:

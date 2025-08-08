@@ -97,6 +97,9 @@ class IncidentFeatures(BaseModel):
     rain: float
     hour: int
     weekday: int
+    incident_count: int
+    tmc_tableNumber: int
+    tmc_tableVersion: int
 
 ## ============================
 ## Feature engineering (same logic as prepare_data)
@@ -159,7 +162,7 @@ def predict(input_data: IncidentFeatures, username: str = Depends(verify_token))
         logger.info(f"Loading model from: {MODEL_PATH}")
         model = joblib.load(MODEL_PATH)
 
-        ## Step 2: Charger FEATURE_ORDER s’il est vide
+        ## Step 2: Load FEATURE_ORDER if empty
         if not FEATURE_ORDER:
             try:
                 FEATURE_ORDER.extend(model.feature_names_in_)
@@ -168,15 +171,15 @@ def predict(input_data: IncidentFeatures, username: str = Depends(verify_token))
                 logger.error(f"Unable to load FEATURE_ORDER: {e}")
                 raise HTTPException(status_code=500, detail="Model feature order missing")
 
-        ## Step 3: Construire le vecteur d’entrée
+        ## Step 3: Construct the vector input
         features_df = build_full_feature_vector(input_data)
         logger.debug(f"Features DataFrame before prediction:\n{features_df}")
         logger.debug(f"DataFrame shape: {features_df.shape}")
 
-        ## Step 4: Réordonner les colonnes
+        ## Step 4: Re order collumns
         features_df = features_df[FEATURE_ORDER]
 
-        ## Step 5: Prédire
+        ## Step 5: Predict
         prediction = model.predict(features_df)[0]
         logger.info(f"Prediction completed: {prediction:.2f} minutes")
 
