@@ -52,7 +52,7 @@ def parse_arguments() -> argparse.Namespace:
     """
     
     parser = argparse.ArgumentParser(description="Traffic Pipeline CLI")
-    parser.add_argument("-a", "--arrondissement", type=int, help="Paris arrondissement (1–20)")
+    parser.add_argument("-a", "--arrondissement", type=int, default = 17,help="Paris arrondissement (1–20)")
     parser.add_argument("-s", "--strategy", type=str, default="incident_analysis", choices=["incident_analysis", "traffic_analysis", "all"], help="Data/train collection strategy")
     parser.add_argument("-p", "--prepare", action="store_true", help="Run feature engineering pipeline")
     parser.add_argument("-t", "--train", action="store_true", help="Train model with prepared dat")   
@@ -97,10 +97,8 @@ def main():
         sys.exit(0)
 
     elif choice == "1":
-        ## Use defaults (arrondissement 17, incident_analysis) regardless of CLI args
-        arrondissement = 17
-        logger.info(f"Running live collection with arrondissement={arrondissement}, strategy='{strategy}'")
-        run_live_data_pipeline(arrondissement=arrondissement, strategy=strategy)
+        logger.info(f"Running live collection with arrondissement={args.arrondissement}, strategy='{strategy}'")
+        run_live_data_pipeline(arrondissement=args.arrondissement, strategy=strategy)
 
     elif choice == "2":
         logger.info(f"Running feature engineering pipeline with strategy='{strategy}'")
