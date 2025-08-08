@@ -1,11 +1,14 @@
 stages:
-  train:
-    cmd: python src/model/train_model.py
+  prepare_data:
+    cmd: echo 3 | python main.py 
     deps:
-    - src/data/raw
-    - src/model/train_model.py
+    - data/raw
     outs:
-    - exports
-    - models
-    metrics:
-    - metrics/model_stats.csv
+    - data/processed
+  train:
+    cmd: echo 5 | python main.py
+    deps:
+    - data/processed
+    outs:
+    - model
+
