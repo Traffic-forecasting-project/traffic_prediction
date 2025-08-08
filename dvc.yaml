@@ -1,8 +1,6 @@
 stages:
   prepare_data:
     cmd: echo 3 | python main.py 
-    deps:
-    - data/raw
     outs:
     - data/processed
   train:

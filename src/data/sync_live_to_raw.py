@@ -1,3 +1,14 @@
+'''
+__author__ = "Mateo Villa Arias"
+__contributors__ = 
+__copyright__ = None
+__version__ = "1.0.0"
+__email__ = ""
+__status__ = "Dev"
+__desc__ = "Data synchronization script from live to raw folder"
+'''
+
+
 import os
 import glob
 import pandas as pd
