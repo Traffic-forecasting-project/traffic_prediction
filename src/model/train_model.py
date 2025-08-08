@@ -1,5 +1,6 @@
 ''' 
-__author__ = -
+__author__ = "Georges Nassopoulos"
+__contributors__ = "Mateo Villa Arias"
 __copyright__ = None
 __version__ = "1.6.0"
 __email__ = "georges.nassopoulos@gmail.com"
@@ -50,7 +51,7 @@ from src.core.constants import (
 logger = get_logger("train_model")
 
 @log_execution_time_and_path
-def train_model(df: pd.DataFrame, strategy: str, target_name: str, data_dir_output: str = "data/processed") -> dict:
+def train_model(df: pd.DataFrame, strategy: str, target_name: str, regenerate_features = False, data_dir_output: str = "data/processed") -> dict:
     """
         Train a model (classification or regression) for the given target variable.
         
@@ -63,9 +64,13 @@ def train_model(df: pd.DataFrame, strategy: str, target_name: str, data_dir_outp
             dict: Dictionary of metrics and paths related to the trained model
     """
     
-    ## === Step 1: Feature engineering ===
-    result = create_features(df, data_dir_output, strategy, target_name)
-    (df, feature_path) = (result[0], result[1])
+    ## === Step 1: Feature engineering regeneration (optional) ===
+    if regenerate_features :
+        result = create_features(df, data_dir_output, strategy, target_name)
+        (df, feature_path) = (result[0], result[1])
+        
+        df.to_csv(feature_path, index=False)
+        logger.info(f"\t Saved feature-engineered DataFrame to {feature_path}")
     
     ## === Step 2: Optional outlier filtering (for regression targets only) ===
     if FILTER_STANDARD_INCIDENTS and target_name in ["incident_duration_min"]:
@@ -74,9 +79,6 @@ def train_model(df: pd.DataFrame, strategy: str, target_name: str, data_dir_outp
         df = df[df[target_name] < threshold]
         logger.info(f"\t Filtered extreme values for {target_name} < 95th percentile ({threshold:.2f}). Rows: {original_len} -> {len(df)}")
 
-    ## === Step 3: Save processed DataFrame ===
-    df.to_csv(feature_path, index=False)
-    logger.info(f"\t Saved feature-engineered DataFrame to {feature_path}")
 
     ## === Step 4: Create input features (X) and target (y) ===
     y = create_target(df, target_name)
@@ -193,15 +195,19 @@ def train_model(df: pd.DataFrame, strategy: str, target_name: str, data_dir_outp
         mlflow.sklearn.log_model(model, artifact_path="model")
 
         ## Log trained feature file and importance JSON as artifacts
-        mlflow.log_artifact(feature_path)
-        if os.path.exists(TOP_FEATURES_FILE):
-            mlflow.log_artifact(TOP_FEATURES_FILE)
+        ## TODO : move this part elsewhere
+        # mlflow.log_artifact(feature_path)
+        # if os.path.exists(TOP_FEATURES_FILE):
+        #     mlflow.log_artifact(TOP_FEATURES_FILE)
 
     return result
 
-def run_train_model_pipeline(strategy: str, data_dir_input: str = "data/live", data_dir_stats: str = "metrics") -> None:
+def run_train_model_pipeline(strategy: str, 
+                             regenerate_features = False,
+                             data_dir_input: str = "data",
+                               data_dir_stats: str = "metrics") -> None:
     """
-        Run the live data collection loop using the specified strategy
+        Run the training pipeline according to the strategy:
 
         Args:
             strategy (str): 'traffic_analysis' or 'incident_analysis'
@@ -213,8 +219,12 @@ def run_train_model_pipeline(strategy: str, data_dir_input: str = "data/live", d
     logger.info(f"STRATEGY : {strategy} \n")
 
     try:
-        ## Load and merge the CSV files for the given strategy
-        df = load_and_merge_files(strategy, data_dir_input)
+        if regenerate_features:
+            data_dir_input = os.path.join(data_dir_input,"raw")
+            ## Load and merge the CSV files for the given strategy
+            df = load_and_merge_files(strategy, data_dir_input)
+        else:
+            data_dir_input = os.path.join(data_dir_input,"processed")
 
         ## Determine the default targets allowed for this strategy, either default or user provided
         selected_targets = [t for t, meta in TARGET_METADATA.items() if strategy in meta["strategies"]]
@@ -226,10 +236,11 @@ def run_train_model_pipeline(strategy: str, data_dir_input: str = "data/live", d
 
         ## Loop through each target and train the model
         for target in targets:
-
+            features_target_path = os.path.join(data_dir_input,f"df_features_{strategy}_{target}.csv")
+            df = pd.read_csv(features_target_path)
             logger.info(f"\t TARGET : {target} \n")
             try:
-                result = train_model(df, strategy, target)
+                result = train_model(df, strategy, target,regenerate_features = regenerate_features)
                 results.append(result)
             except Exception as e:
                 logger.warning(f"Error during training for target '{target}': {e}")
