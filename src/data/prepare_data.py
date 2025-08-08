@@ -400,13 +400,13 @@ def create_features(df: pd.DataFrame, data_dir_output: str, strategy: str, targe
 
     return (df, feature_path)
 
-def run_prepare_data_pipeline(strategy: str, targets_input : list = None, data_dir_input: str = "data/live", data_dir_output: str = "data/processed") -> None:
+def run_prepare_data_pipeline(strategy: str, targets_input : list = None, data_dir_input: str = "data/raw", data_dir_output: str = "data/processed") -> None:
     """
         Run the prepare data (feauture engineering) loop using the specified strategy
 
         Args:
             strategy (str): 'traffic_analysis' or 'incident_analysis'
-            data_dir_input (str): path to live data collected, by default "data/live"
+            data_dir_input (str): path to live data collected, by default "data/raw"
             data_dir_output (str): path to processed data, by default "data/processed"          
     """
     

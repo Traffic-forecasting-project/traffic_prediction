@@ -16,6 +16,8 @@ import io
 from dotenv import load_dotenv
 
 from src.data.live_data_collector import run_live_data_pipeline
+from src.data.sync_live_to_raw import update_raw_from_live
+
 from src.data.prepare_data import run_prepare_data_pipeline
 from src.eda.eda_analysis import run_eda_pipeline
 from src.model.train_model import run_train_model_pipeline
@@ -68,7 +70,6 @@ def main():
     
     args = parse_arguments()
 
-    ## If any invalid arguments were passed, inform and exit
     if args.arrondissement is not None and args.arrondissement not in VALID_ARRONDISSEMENTS:
         logger.error(f"Invalid arrondissement '{args.arrondissement}'. Must be between 1 and 20.")
         sys.exit(1)
@@ -77,21 +78,20 @@ def main():
         logger.error(f"Invalid strategy '{args.strategy}'. Choose from {VALID_STRATEGIES}.")
         sys.exit(1)
 
-    ## Display menu
     print("=== TRAFFIC LIVE DATA MENU ===")
-    print("1. Run live data collection (default values)")
-    print("2. Run feature engineering on collected data")
-    print("3. Run EDA analysis on data")
-    print("4. Run train model on data")
-    print("5. Launch fastapi service with uvicorn") 
-    print("6. Run tests avec pytest")    
+    print("1. Run live data collection")
+    print("2. Sync live files into raw directory")
+    print("3. Run feature engineering on collected data")
+    print("4. Run EDA analysis on data")
+    print("5. Run train model on data")
+    print("6. Launch FastAPI service with uvicorn")
+    print("7. Run tests avec pytest")
     print("q. Quit")
     print("==============================")
     choice = input("Select an option: ").strip().lower()
 
-    ## Use strategy passed if valid, else default
     strategy = args.strategy if args.strategy in VALID_STRATEGIES else "incident_analysis"
-    
+
     if choice == "q":
         logger.info("User chose to quit. Exiting.")
         sys.exit(0)
@@ -101,29 +101,36 @@ def main():
         run_live_data_pipeline(arrondissement=args.arrondissement, strategy=strategy)
 
     elif choice == "2":
+        delete_input = input("Delete live files after sync? (y/n): ").strip().lower()
+        delete_live = delete_input == "y"
+        logger.info(f"Synchronizing live files into raw directory (delete_live={delete_live})")
+        update_raw_from_live(delete_live=delete_live)
+
+    elif choice == "3":
         logger.info(f"Running feature engineering pipeline with strategy='{strategy}'")
         run_prepare_data_pipeline(strategy)
-    
-    elif choice == "3":
+
+    elif choice == "4":
         logger.info(f"Running EDA analysis pipeline with strategy='{strategy}'")
         run_eda_pipeline(strategy)
 
-    elif choice == "4":
+    elif choice == "5":
         logger.info(f"Running train model pipeline with strategy='{strategy}'")
         run_train_model_pipeline(strategy)
- 
-    elif choice == "5":
-        logger.info(f"Launch FastAPI uvicorn server for routes with trained model path ==> '{MODEL_PATH}'")
-        run_fastapi_service_pipeline(reload=True)
 
     elif choice == "6":
+        logger.info(f"Launching FastAPI uvicorn server for routes with trained model path ==> '{MODEL_PATH}'")
+        run_fastapi_service_pipeline(reload=True)
+
+    elif choice == "7":
         logger.info("Running pytest on tests/")
         retcode = pytest.main(["tests"])
         sys.exit(retcode)
-         
+
     else:
-        logger.warning(f"Invalid menu option '{choice}'. Please choose '1', '2' or 'q'.")
+        logger.warning(f"Invalid menu option '{choice}'. Please choose a valid option.")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
