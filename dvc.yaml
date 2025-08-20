@@ -1,12 +1,16 @@
 stages:
   prepare_data:
-    cmd: echo 3 | python main.py 
+    cmd: echo 3 | python main.py
+    deps:
+      - data/raw
+      - main.py
+      - src/data/prepare_data.py       
     outs:
-    - data/processed
+      - data/processed
   train:
     cmd: echo 5 | python main.py
     deps:
-    - data/processed
+      - data/processed
+      - src/model/train_model.py
     outs:
-    - model
-
+      - model
