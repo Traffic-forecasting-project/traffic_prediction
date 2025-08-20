@@ -83,8 +83,6 @@ python main.py
 
 ---
 
-
-
 ## Data Sources
 
 - **Incidents and traffic**: [TomTom Traffic API](https://developer.tomtom.com/traffic-api/api-explorer)
@@ -122,6 +120,39 @@ The figure below illustrates the two possible strategies for data extraction:
 
 ---
 
+## Data Synchronization and DVC/Dagshub file versioning
+
+This repository uses **DVC** to track different files important for our project
+
+### Tracked files 
+data/raw -> .csv files storing collected data for each Paris district.
+data/processed -> .csv containing features for training
+model/ -> model artifacts
+
+### Setup
+The following steps allow to use DVC tracking with remote storage on Dagshub server:
+
+```
+pip install "dvc[s3]"
+dvc init
+
+# Configure DagsHub remote
+dvc remote add -d origin s3://dvc/mateovillaarias/traffic_prediction
+dvc remote modify origin endpointurl https://dagshub.com
+
+# Local-only credentials (never commit these)
+export DAGSHUB_USER="your_username"
+export DAGSHUB_TOKEN="your_personal_access_token"
+dvc remote modify origin --local access_key_id $DAGSHUB_USER
+dvc remote modify origin --local secret_access_key $DAGSHUB_TOKEN
+
+```
+**MANDATORY**: Once the remote access is set, download the latest data:
+
+```
+dvc pull
+```
+### File synchronisation and push to remote
 
 ## 🛠 Tech Stack
 
@@ -130,6 +161,7 @@ The figure below illustrates the two possible strategies for data extraction:
 - **TomTom** and **OpenWeatherMap** APIs
 - **Pandas**, **Scikit-learn**, **Joblib**
 - **DVC** for data and model versioning
+- **Dagshub** for data storage and DVC integration with Github repo
 - *(Planned)*: uv, authorisation, monitoring, CI tools
 
 
