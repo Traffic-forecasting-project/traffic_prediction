@@ -43,7 +43,7 @@ FAKE_USERS_DB = {"admin": {"username": "admin", "password": "adminpass"}}
 ## ========================
 ARRONDISSEMENTS_PATH = os.path.join(DATA_DIR, "arrondissements.csv")
 CSV_PATH = os.path.join(LIVE_DATA_DIR, "live_data.csv")
-TOP_FEATURES_FILE = os.path.join(PROCESSED_DATA_DIR, "feature_importances.json" )
+TOP_FEATURES_FILE = os.path.join(MODELS_DIR, "feature_importances.json" )
 MODEL_PATH = os.path.join(MODELS_DIR, "model_incident_analysis_incident_duration_min.joblib" )
 
 ## ========================
