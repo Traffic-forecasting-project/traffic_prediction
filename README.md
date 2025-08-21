@@ -125,9 +125,9 @@ The figure below illustrates the two possible strategies for data extraction:
 This repository uses **DVC** to track different files important for our project
 
 ### Tracked files 
-data/raw -> .csv files storing collected data for each Paris district.
-data/processed -> .csv containing features for training
-model/ -> model artifacts
+- **data/raw** -> .csv files storing collected data for each Paris district.
+- **data/processed** -> .csv containing features for training
+- **model/** -> model artifacts
 
 ### Setup
 The following steps allow to use DVC tracking with remote storage on Dagshub server:
@@ -153,6 +153,31 @@ dvc remote modify origin --local secret_access_key $DAGSHUB_TOKEN
 dvc pull
 ```
 ### File synchronisation and push to remote
+
+Collected live data is stores at data/live in form of .csv files per paris district.
+To synchornize files in data/live to the main dataset located in data/raw, you must execute option 2 from the main.py script
+
+```
+python main.py 
+=== TRAFFIC LIVE DATA MENU ===
+1. Run live data collection
+2. Sync live files into raw directory
+3. Run feature engineering on collected data
+4. Run EDA analysis on data
+5. Run train model on data
+6. Launch FastAPI service with uvicorn
+7. Run tests avec pytest
+8. Push raw data to DVC remote
+9. Push pipeline results to DVC remote
+q. Quit
+==============================
+Select an option: 2
+Delete live files after sync? (y/n): n
+```
+
+After syncrhonization you can push the raw data to the dvc server using the option 8 from main.py
+
+
 
 ## 🛠 Tech Stack
 
