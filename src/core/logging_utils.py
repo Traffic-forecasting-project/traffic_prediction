@@ -71,7 +71,7 @@ def get_logger(name: str) -> logging.Logger:
         setup_logging()  # In case root logger not set
         for handler in logging.getLogger().handlers:
             logger.addHandler(handler)
-
+        logger.propagate = False
     return logger
 
 def log_execution_time_and_path(func):
