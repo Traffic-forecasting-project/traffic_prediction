@@ -120,62 +120,82 @@ The figure below illustrates the two possible strategies for data extraction:
 
 ---
 
-## Data Synchronization and DVC/Dagshub file versioning
+## Data Synchronization and DVC/Dagshub File Versioning
 
-This repository uses **DVC** to track different files important for our project
+This repository uses **DVC** to track data and models important for the project.
 
-### Tracked files 
-- **data/raw** -> .csv files storing collected data for each Paris district.
-- **data/processed** -> .csv containing features for training
-- **model/** -> model artifacts
+### Tracked files
+- **data/raw/** → raw `.csv` files storing collected data for each Paris district
+- **data/processed/** → processed features for training
+- **model/** → model artifacts
+
+---
 
 ### Setup
-The following steps allow to use DVC tracking with remote storage on Dagshub server:
 
+Install and initialize DVC with S3 support:
 ```
 pip install "dvc[s3]"
 dvc init
-
-# Configure DagsHub remote
+```
+Configure the DagsHub remote:
+```
 dvc remote add -d origin s3://dvc/mateovillaarias/traffic_prediction
 dvc remote modify origin endpointurl https://dagshub.com
-
-# Local-only credentials (never commit these)
+```
+Local-only credentials (never commit these)
+```
 export DAGSHUB_USER="your_username"
 export DAGSHUB_TOKEN="your_personal_access_token"
 dvc remote modify origin --local access_key_id $DAGSHUB_USER
 dvc remote modify origin --local secret_access_key $DAGSHUB_TOKEN
-
 ```
-**MANDATORY**: Once the remote access is set, download the latest data:
-
+**Mandatory:** once the remote is set, pull the latest data:
 ```
 dvc pull
 ```
-### File synchronisation and push to remote
+---
 
-Collected live data is stores at data/live in form of .csv files per paris district.
-To synchornize files in data/live to the main dataset located in data/raw, you must execute option 2 from the main.py script
+### Usage
 
+Collected live data is stored in `data/live/` (per district `.csv` files).  
+
+- To synchronize `data/live` into the main dataset in `data/raw`, run option 2 in `main.py`:
 ```
-python main.py 
+python main.py
+```
+```
 === TRAFFIC LIVE DATA MENU ===
-1. Run live data collection
+...
 2. Sync live files into raw directory
-3. Run feature engineering on collected data
-4. Run EDA analysis on data
-5. Run train model on data
-6. Launch FastAPI service with uvicorn
-7. Run tests avec pytest
-8. Push raw data to DVC remote
-9. Push pipeline results to DVC remote
-q. Quit
-==============================
+...
 Select an option: 2
 Delete live files after sync? (y/n): n
 ```
 
-After syncrhonization you can push the raw data to the dvc server using the option 8 from main.py
+- After synchronization, you can push data and models to DVC using option 8:
+```
+python main.py
+
+=== TRAFFIC LIVE DATA MENU ===
+...
+8. Push data to DVC remote
+...
+Select an option: 8
+DVC remote name, leave blank for default:
+Git commit message, leave blank for default:
+Select what to push [raw/processed/train/all] (default: raw): raw
+```
+- **This will:**
+  - Commit changes (dvc commit, git add, git commit)
+  - Push to the configured DagsHub remote
+
+
+- **Option 8** works with:
+  - raw → pushes data/raw
+  - processed → pushes data/processed
+  - train → pushes model/
+  - all → pushes all of the above
 
 
 
