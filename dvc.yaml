@@ -6,11 +6,11 @@ stages:
       - main.py
       - src/data/prepare_data.py       
     outs:
-      - data/processed
+      - data/processed/
   train:
     cmd: echo 5 | python main.py
     deps:
       - data/processed
       - src/model/train_model.py
     outs:
-      - model
+      - model/

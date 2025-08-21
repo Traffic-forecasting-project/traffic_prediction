@@ -13,7 +13,7 @@ stages:
       md5: 5cf0d18255ceadba7212a024c4ebfc38
       size: 10456
     outs:
-    - path: model
+    - path: model/
       hash: md5
       md5: d739a72d0f29d7bf31191d1c3cba1d76.dir
       size: 527830643
@@ -35,7 +35,7 @@ stages:
       md5: 132b43e0ebf29256cd3a5662abee3e6a
       size: 21097
     outs:
-    - path: data/processed
+    - path: data/processed/
       hash: md5
       md5: 3784fb5da1faa8cbe8c1d86e8f46a5fc.dir
       size: 102091308
