@@ -14,8 +14,8 @@ import sys
 import os
 import io
 from dotenv import load_dotenv
-from src.data.push_raw_data import run_push_raw_data_pipeline
-from src.data.push_training_data import run_push_pipeline_results_pipeline
+from src.data.push_data import run_push_data
+
 
 from src.data.live_data_collector import run_live_data_pipeline
 from src.data.sync_live_to_raw import update_raw_from_live
@@ -88,8 +88,7 @@ def main():
     print("5. Run train model on data")
     print("6. Launch FastAPI service with uvicorn")
     print("7. Run tests avec pytest")
-    print("8. Push raw data to DVC remote")
-    print("9. Push pipeline results to DVC remote")
+    print("8. Push data to DVC remote")
     print("q. Quit")
     print("==============================")
     choice = input("Select an option: ").strip().lower()
@@ -134,14 +133,10 @@ def main():
     elif choice == "8":
         remote = input("DVC remote name, leave blank for default: ").strip() or None
         msg = input("Git commit message, leave blank for default: ").strip() or None
-        logger.info("Pushing raw data to DVC remote")
-        run_push_raw_data_pipeline(remote=remote, message=msg)
+        dtype = input("Select what to push [raw/processed/train/all] (default: raw): ").strip().lower() or "raw"
+        logger.info(f"Pushing data to DVC remote (type={dtype})")
+        run_push_data(dtype, remote=remote, message=msg)
 
-    elif choice == "9":
-        remote = input("DVC remote name, leave blank for default: ").strip() or None
-        msg = input("Git commit message, leave blank for default: ").strip() or None
-        logger.info("Pushing pipeline results to DVC remote")
-        run_push_pipeline_results_pipeline(remote=remote, message=msg)
 
     else:
         logger.warning(f"Invalid menu option '{choice}'. Please choose a valid option.")
