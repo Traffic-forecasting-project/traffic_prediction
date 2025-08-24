@@ -10,7 +10,7 @@ __desc__ = "Unit tests for FastAPI service endpoints with authentication and val
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch
-from service import app
+from src.core.service import app
 import json
 
 @pytest.fixture(scope="module")
@@ -129,8 +129,15 @@ def test_predict_success(client_instance: TestClient, auth_token: str) -> None:
         "wind": 4.0,
         "rain": 0.0,
         "hour": 8,
-        "weekday": 2
+        "weekday": 2,
+        "lat": 48.8566,
+        "lon": 2.3522,
+        "incident_count": 1,
+        "icon_category": 1,
+        "tmc_tableNumber": 1,
+        "tmc_tableVersion": 1
     }
+
       
     response = client_instance.post(
         "/predict",
@@ -208,10 +215,13 @@ def test_predict_internal_server_error(client_instance: TestClient, auth_token: 
         "wind": 4.0,
         "rain": 0.0,
         "hour": 8,
-        "weekday": 2
+        "weekday": 2,
+        "incident_count": 1,
+        "tmc_tableNumber": 100,
+        "tmc_tableVersion": 2
     }
 
-    with patch("service.joblib.load") as mock_load:
+    with patch("src.core.service.joblib.load") as mock_load:
         mock_model = MagicMock()
         mock_model.predict.side_effect = Exception("Simulated internal error")
         mock_load.return_value = mock_model

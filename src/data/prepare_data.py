@@ -7,82 +7,24 @@ __status__ = "Dev"
 __desc__ = "Data preparation module: feature engineering and target construction for traffic prediction."
 '''
 
-import os
-import glob
-import json
 import pandas as pd
 import numpy as np
-from typing import Literal
 from sklearn.impute import SimpleImputer
-from logging_utils import get_logger, log_execution_time_and_path
+from src.core.logging_utils import get_logger, log_execution_time_and_path
+
+from src.core.constants import (
+    FILTER_STANDARD_INCIDENTS,
+    TARGET_METADATA,
+    ENABLE_EXTRA_FEATURES
+)
+
+from src.utils.utils import (
+    safe_eval,
+    clean_columns_and_rows,
+    load_and_merge_files
+)
 
 logger = get_logger("prepare_data")
-
-## Enable creation of extra feature to make more descriptive model
-enable_extra_features = True
-
-## Mapping of all supported targets with allowed strategies
-TARGET_METADATA = {
-    "jam_factor": {"strategies": ["traffic_analysis", "incident_analysis"]},
-    "incident_duration_min": {"strategies": ["incident_analysis"]},
-    "mean_magnitude": {"strategies": ["incident_analysis"]},
-}
-
-@log_execution_time_and_path
-def load_and_merge_files(strategy: str, data_dir: str) -> pd.DataFrame:
-    """
-        Load and merge all CSV and JSON files matching the strategy from a given directory
-
-        Args:
-            strategy (str): Strategy name ('traffic_analysis' or 'incident_analysis')
-            data_dir (str): Path to the folder containing live data files
-
-        Returns:
-            pd.DataFrame: Merged DataFrame from all matching files
-    """
-
-    ## Construct file pattern based on strategy (e.g., 'live_data_traffic_analysis*')
-    pattern = f"live_data_{strategy}*"
-    full_path = os.path.join(data_dir, pattern)
-
-    ## Search for all files matching the pattern
-    files = glob.glob(full_path)
-
-    ## Loop through each matched file and load it depending on its extension
-    dfs = []    
-    for file in files:
-        if file.endswith(".csv"):
-            dfs.append(pd.read_csv(file, low_memory=False))
-        elif file.endswith(".json"):
-            dfs.append(pd.read_json(file))
-
-    ## If no files were loaded, raise an error
-    if not dfs:
-        raise FileNotFoundError(f"No files found for pattern: {full_path}")
-
-    ## Concatenate all loaded DataFrames into one
-    return pd.concat(dfs, ignore_index=True)
-
-def safe_eval(val):
-    """
-        Safely parse stringified lists from JSON fields such as delays or magnitudes
-
-        Args:
-            val (str or list): Input to convert into a list
-
-        Returns:
-            list: Parsed list or empty list on failure
-    """
-    
-    try:
-        if isinstance(val, str):
-            return json.loads(val.replace("'", '"'))
-        elif isinstance(val, list):
-            return val
-    except Exception:
-        return []
-    
-    return []
 
 def detect_leakage(df: pd.DataFrame, target_column: str, threshold: float = 0.9, drop: bool = False) -> pd.DataFrame:
     """
@@ -135,28 +77,6 @@ def detect_leakage(df: pd.DataFrame, target_column: str, threshold: float = 0.9,
 
     return df
 
-def clean_columns_and_rows(df: pd.DataFrame, threshold: float = 0.9) -> pd.DataFrame:
-    """
-        Clean dataset by dropping columns and rows with too many missing values
-
-        Args:
-            df (pd.DataFrame): The input DataFrame to clean
-            threshold (float): Maximum allowed percentage of missing values (default: 0.9 = 90%)
-
-        Returns:
-            pd.DataFrame: A cleaned DataFrame with low-quality columns and rows removed
-    """
-    
-    ## Drop columns with more than 'threshold' proportion of missing values
-    col_thresh = int((1 - threshold) * len(df))
-    df = df.dropna(axis=1, thresh=col_thresh)
-
-    ## Drop rows with more than 'threshold' proportion of missing values
-    row_thresh = int((1 - threshold) * df.shape[1])
-    df = df.dropna(axis=0, thresh=row_thresh)
-
-    return df
-
 def advanced_create_features(df: pd.DataFrame, selected_features: list = None) -> pd.DataFrame:
     """
         Generate advanced features to improve prediction
@@ -176,8 +96,6 @@ def advanced_create_features(df: pd.DataFrame, selected_features: list = None) -
         pd.DataFrame
             DataFrame with new engineered features
     """
-
-    import pandas as pd
 
     if selected_features is None:
         selected_features = [
@@ -375,9 +293,9 @@ def advanced_create_features(df: pd.DataFrame, selected_features: list = None) -
         df["log_slowdown_ratio"] = np.log1p(df["slowdown_ratio"])
 
     return df
-
+    
 @log_execution_time_and_path
-def create_features(df: pd.DataFrame, strategy: str, target_column: str = "incident_duration_min") -> pd.DataFrame:
+def create_features(df: pd.DataFrame, data_dir_output: str, strategy: str, target_column: str = "incident_duration_min") -> pd.DataFrame:
     """
         Create additional features from the input DataFrame based on the selected strategy
 
@@ -390,7 +308,7 @@ def create_features(df: pd.DataFrame, strategy: str, target_column: str = "incid
             pd.DataFrame: DataFrame with new features added
     """
 
-    logger.info(f"Create new features, including target variable.")
+    logger.info("Create new features, including target variable.")
   
     df = df.copy()
 
@@ -450,7 +368,7 @@ def create_features(df: pd.DataFrame, strategy: str, target_column: str = "incid
         df[["mean_magnitude"]] = imputer.fit_transform(df[["mean_magnitude"]])
 
     ## OPTIONAL : Extra engineered features to improve model performance
-    if enable_extra_features:
+    if ENABLE_EXTRA_FEATURES:
         ## GOOD RESULTS !!!
         # df = advanced_create_features(df, selected_features=['minutes_since_last_report', 'hour_x_jam'])    
         # df = advanced_create_features(df, selected_features=['hour_x_jam', 'time_period'])
@@ -470,23 +388,53 @@ def create_features(df: pd.DataFrame, strategy: str, target_column: str = "incid
         raise ValueError(f"Target '{target_column}' not found in DataFrame.")
 
     logger.info(f"Feature set finalized with {df.shape[1]} columns after leakage control.")
-    
-    return df
 
-@log_execution_time_and_path
-def create_target(df: pd.DataFrame, target: str) -> pd.Series:
+    ## Optional outlier filtering (for regression targets only) ===
+    if FILTER_STANDARD_INCIDENTS and target_column in ["incident_duration_min"]:
+        threshold = df[target_column].quantile(0.95)
+        original_len = len(df)
+        df = df[df[target_column] < threshold]
+        logger.info(f"\t Filtered extreme values for {target_column} < 95th percentile ({threshold:.2f}). Rows: {original_len} -> {len(df)}")
+
+    feature_path = f"{data_dir_output}/df_features_{strategy}_{target_column}.csv"
+
+    return (df, feature_path)
+
+def run_prepare_data_pipeline(strategy: str, targets_input : list = None, data_dir_input: str = "data/live", data_dir_output: str = "data/processed") -> None:
     """
-        Extracts the target column from the dataset. Raises error if it doesn't exist
+        Run the prepare data (feauture engineering) loop using the specified strategy
 
         Args:
-            df (pd.DataFrame): Input data with target column
-            target (str): Target column name to extract
-
-        Returns:
-            pd.Series: The target variable
+            strategy (str): 'traffic_analysis' or 'incident_analysis'
+            data_dir_input (str): path to live data collected, by default "data/live"
+            data_dir_output (str): path to processed data, by default "data/processed"          
     """
     
-    if target not in df.columns:
-        raise ValueError(f"Target '{target}' not found in DataFrame.")
-    
-    return df[target]
+    try:
+        ## Load and merge the CSV files for the given strategy
+        df = load_and_merge_files(strategy, data_dir_input)
+
+        ## Determine the default targets allowed for this strategy, either default or user provided
+        default_targets = [t for t, meta in TARGET_METADATA.items() if strategy in meta["strategies"]]
+        selected_targets = targets_input if targets_input else default_targets
+
+        ## Filter valid targets for the current strategy, and return error if no valid targets
+        targets = [t for t in selected_targets if strategy in TARGET_METADATA.get(t, {}).get("strategies", [])]
+        if not targets:
+            logger.warning(f"No valid targets for strategy '{strategy}'. Skipping.")
+
+        ## Loop through each target and train the model
+        for target_name in targets:
+
+            logger.info(f"\t TARGET : {target_name} \n")
+            try:
+                result = create_features(df, data_dir_output, strategy, target_name)
+                df_clean = result[0]
+                feature_path = result[1]               
+                df_clean.to_csv(feature_path, index=False)
+                logger.info(f"\t Saved feature-engineered DataFrame to {feature_path}")               
+            except Exception as e:
+                logger.warning(f"Error during prepare data for target '{target_name}': {e}")
+
+    except Exception as e:
+        logger.warning(f"Error while feature engineering strategy '{strategy}': {e}")

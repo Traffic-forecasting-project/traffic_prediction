@@ -1,37 +1,89 @@
-# MLOps Project – Traffic Forecasting and Incident Analysis
+# 🚦 MLOps Project – Traffic Forecasting & Incident Analysis
 
-## Objective
+## 🧠 Objective
 
-The goal of this project is to build a complete MLOps pipeline for a real-world use case: **forecasting road traffic** and **analyzing traffic incidents** using real-time data from the TomTom API and a weather API.
+Build a full **MLOps pipeline** to forecast **road traffic congestion** and analyze **traffic incidents** using **live data** from the TomTom API and weather conditions from OpenWeather.
 
-## Key Features
+---
 
-- Daily data updates through automated ingestion
-- Fully automated processing pipeline (ETL, training, deployment)
-- Continuous monitoring of model performance and drift
-- Secure and scalable prediction API
-- (Optional) Automatic incident summaries generated via LLMs
+## 🧩 Project Overview
 
-## Project Structure
+This repository includes:
 
-This project is organized as follows:
+- 📥 **Live data collection** from APIs (TomTom + OpenWeather)
+- 🧼 **Data cleaning and preparation**
+- 🤖 **Model training** for multiple incident-related targets
+- 📈 **Evaluation and metrics logging**
+- 📦 **Model deployment** via **FastAPI**
+- 📊 **Strategy comparison**
+- 📊 **Drift monitoring** (optional)
+- 🔁 **Versioning with DVC**
+
+---
+
+## 📁 Project Structure
 
 ```
 .
-├── src/
-│   ├── live_data_collector.py     # Main script to collect traffic, incident and weather data live
-│   └── data/
-│       └── arrondissements.csv    # CSV with Paris arrondissement geometries (as polygon coordinates)
-├── images/
-│   └── data_strategies.png        # Comparison diagram of traffic vs. incident strategies
-├── live/                          # Output folder with CSV files per arrondissement
-├── logs/                          # Logs of the collection process
-├── .env                           # Contains your API keys (not versioned)
-├── README.md                      # Project documentation
+├── main.py                  # Main script entrypoint
+├── requirements.txt         # All required packages
+├── pytest.ini               # Pytest config
+├── README.md                # This file
+├── .env                     # API keys (not tracked)
+│
+├── data/                    # All data (raw, processed, live)
+│   ├── raw/
+│   ├── processed/
+│   └── live/
+│
+├── model/                   # Trained models (.joblib)
+├── metrics/                 # Output metrics
+├── logs/                    # Log files
+├── eda/                     # Exploratory Data Analysis
+│
+├── docker/                  # (Optional) Docker structure
+│
+├── src/                     # Source code
+│   ├── auth/                # JWT Auth
+│   ├── core/                # Constants, logger, API service
+│   ├── data/                # Data acquisition & preparation
+│   ├── eda/                 # EDA generation
+│   ├── model/               # Model training
+│   ├── monitoring/          # Drift monitoring (optional)
+│   └── utils/               # Utility functions
+│
+└── tests/                   # API and logic tests
 ```
 
+---
 
-The current structure only includes live collection; extracted datasetsn models etc. will be added later and organized accordingly with dvc/dagshub.
+## 🔑 Setup Instructions
+
+```bash
+# 1. Clone the repository
+git clone <repo_url>
+cd traffic_prediction
+
+# 2. Create and activate virtual env
+python -m venv venv
+venv\Scripts\activate.bat  # (Windows)
+# or
+source venv/bin/activate   # (Linux/Mac)
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Add your API keys in a `.env` file
+echo TOMTOM_API_KEY=your_tomtom_key >> .env
+echo WEATHER_KEY=your_weather_key >> .env
+
+# 5. Run full pipeline
+python main.py
+```
+
+---
+
+
 
 ## Data Sources
 
@@ -49,7 +101,15 @@ We focus on **live data extraction** instead of historical data for the followin
 We use a `.csv` file with **bounding boxes (BBOX)** of Paris arrondissements, applied fully or split.
 
 
-## Strategy Comparison
+## 📊 Strategy Comparison
+
+- Multiple strategies can be tested and compared by changing configuration values.
+- Models support different targets like:
+  - `jam_factor`
+  - `congestion_label`
+  - `incident_duration_min`
+- Results are stored in `metrics/metrics.csv` and exported as visual plots.
+
 
 The figure below illustrates the two possible strategies for data extraction:
 
@@ -62,35 +122,19 @@ The figure below illustrates the two possible strategies for data extraction:
 
 ---
 
-## Tech Stack
 
-- **Python**
-- **TomTom API**, **Weather API**
-- **Pandas, Requests**
-- **Git**
-- **venv**
-- *(Planned)*: uv, FastAPI, ETL & ML pipelines, DVC/Dagshub, CI tools
+## 🛠 Tech Stack
+
+- **Python 3.11**
+- **FastAPI** for the prediction service
+- **TomTom** and **OpenWeatherMap** APIs
+- **Pandas**, **Scikit-learn**, **Joblib**
+- **DVC** for data and model versioning
+- *(Planned)*: uv, authorisation, monitoring, CI tools
+
 
 ---
 
-## Setup Instructions
+## 📞 Contact
 
-```bash
-# 1. Clone the repository
-git clone <repo_url>
-cd <repo_folder>
-
-# 2. Create and activate virtual env
-python -m venv venv
-source venv/bin/activate  # or venv\Scripts\activate (Windows)
-
-# 3. Install dependencies
-pip install -r requirements.txt
-
-# 4. Set your API key in a .env file
-echo "TOMTOM_API_KEY=your_key_here" > .env
-echo "WEATHER_KEY=your_key_here" > .env
-
-# 5. Run the collector
-python src/live_data_collector.py
-```
+> Email: georges.nassopoulos@gmail.com, ingmatvillaa@gmail.com, elqounss.karim@gmail.com

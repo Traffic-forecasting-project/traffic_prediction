@@ -11,53 +11,25 @@ import os
 import glob
 import pandas as pd
 import numpy as np
-from typing import List
 import matplotlib.pyplot as plt
 import seaborn as sns
-from logging_utils import get_logger
 from io import StringIO 
 
-## List of target columns
-targets: List[str] = [
-    "congestion_label",
-    "avg_speed",
-    "jam_factor",
-    "incident_duration_min",
-    "mean_delay",
-    "mean_magnitude"
-]
+from src.core.logging_utils import get_logger, log_execution_time_and_path
+
+from src.utils.utils import (
+    save_summary_stats
+)
+
+from src.core.constants import (
+    TARGETS,
+    LIVE_DATA_DIR,
+    EDA_OUTPUT_DIR,
+    PROCESSED_DATA_DIR 
+)
 
 ## Initialize logger
 logger = get_logger(__name__)
-
-## Define input/output directories
-LIVE_DIR = "live"
-EXPORTS_DIR = "exports"
-EDA_OUTPUT_DIR = "eda_outputs"
-
-## Ensure output directory exists
-os.makedirs(EDA_OUTPUT_DIR, exist_ok=True)
-
-def save_summary_stats(df: pd.DataFrame, label: str, output_path: str) -> None:
-    """
-        Save summary statistics (mean, std, missing values, etc.) of a DataFrame to a CSV file
-
-        Args:
-            df (pd.DataFrame): Input data
-            label (str): Dataset label for identification
-            output_path (str): Path to output CSV file
-    """
-    
-    ## Compute basic descriptive statistics
-    desc = df.describe(include='all').transpose()
-
-    ## Add missing value metrics
-    desc["missing_count"] = df.isnull().sum()
-    desc["missing_ratio"] = df.isnull().mean()
-    desc["dataset"] = label
-
-    ## Save to CSV, append if already exists
-    desc.to_csv(output_path, mode='a', header=not os.path.exists(output_path))
 
 def plot_histograms(df: pd.DataFrame, label: str, output_dir: str) -> None:
     """
@@ -194,7 +166,7 @@ def generate_eda_report(csv_path: str, target: str = "mean_delay"):
     ## Load dataset
     df = pd.read_csv(csv_path, low_memory=False)
     base_name = os.path.splitext(os.path.basename(csv_path))[0]
-    output_folder = f"eda_outputs_{base_name}"
+    output_folder = f"{EDA_OUTPUT_DIR}/eda_outputs_{base_name}"
     os.makedirs(output_folder, exist_ok=True)
 
     ## ====== 1. General Information ======
@@ -260,34 +232,49 @@ def generate_eda_report(csv_path: str, target: str = "mean_delay"):
 
     logger.info(f"\t [EDA] Report generated for {target} in folder: {output_folder}")
 
-## Path to store all global stats
-summary_path = os.path.join(EDA_OUTPUT_DIR, "eda_summary.csv")
+@log_execution_time_and_path
+def run_eda_pipeline(strategy: str) -> None:
+    """
+        Run EDA analysis using the specified strategy and live data
 
-## Perform EDA on raw live data grouped by strategy
-for strategy in ["incident_analysis", "traffic_analysis"]:
-    pattern = os.path.join(LIVE_DIR, f"live_data_{strategy}*")
-    files = glob.glob(pattern)
+        Args:
+            strategy (str): 'traffic_analysis' or 'incident_analysis'          
+    """
+    
+    try:
 
-    if files:
-        load_and_analyze_group(f"live_{strategy}", files, summary_path)
-    else:
-        logger.warning(f"[EDA] No files found for strategy: {strategy}")
+        ## Path to store all global stats
+        summary_path = os.path.join(EDA_OUTPUT_DIR, "eda_summary.csv")
 
-## Perform EDA on all feature-engineered exports
-export_files = glob.glob(os.path.join(EXPORTS_DIR, "*.csv"))
-for f in export_files:
-    label = os.path.splitext(os.path.basename(f))[0]
-    load_and_analyze_group(f"exports_{label}", [f], summary_path)
+        ## Perform EDA on raw live data grouped by strategy
+        for strategy in ["incident_analysis", "traffic_analysis"]:
+            pattern = os.path.join(LIVE_DATA_DIR, f"live_data_{strategy}*")
+            files = glob.glob(pattern)
 
-## Final summary logs
-logger.info(f"\t All visualizations saved to: {EDA_OUTPUT_DIR}/")
-logger.info(f"\t Summary statistics CSV: {summary_path}")
+            if files:
+                load_and_analyze_group(f"live_{strategy}", files, summary_path)
+            else:
+                logger.warning(f"[EDA] No files found for strategy: {strategy}")
 
-## Loop through each target and generate EDA report
-for target in targets:
-    csv_file = f"{EXPORTS_DIR}/df_features_incident_analysis_{target}.csv"
-    if os.path.exists(csv_file):
-        logger.info(f"\t Generating EDA report for {target}...")
-        generate_eda_report(csv_file, target)
-    else:
-        logger.info(f"\t File not found: {csv_file}")
+        ## Perform EDA on all feature-engineered exports
+        export_files = glob.glob(os.path.join(PROCESSED_DATA_DIR, "*.csv"))
+        for f in export_files:
+            label = os.path.splitext(os.path.basename(f))[0]
+            load_and_analyze_group(f"exports_{label}", [f], summary_path)
+
+        ## Final summary logs
+        logger.info(f"\t All visualizations saved to: {EDA_OUTPUT_DIR}/")
+        logger.info(f"\t Summary statistics CSV: {summary_path}")
+
+        ## Loop through each target and generate EDA report
+        for target in TARGETS:
+            csv_file = f"{PROCESSED_DATA_DIR}/df_features_incident_analysis_{target}.csv"
+            if os.path.exists(csv_file):
+                logger.info(f"\t Generating EDA report for {target}...")
+                generate_eda_report(csv_file, target)
+            else:
+                logger.info(f"\t File not found: {csv_file}")
+
+    except Exception as e:
+        logger.warning(f"Error while EDA analysis for strategy '{strategy}': {e}")
+       

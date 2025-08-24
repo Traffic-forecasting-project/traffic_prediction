@@ -2,3 +2,5 @@
 /exports
 /models
 /live
+"__pycache__/\n*.pyc\n.env\n*.csv\n*.json\n*.joblib\n*.pkl\nlogs/\nmlruns/\nmetrics/\narbo_check*.txt\narborescence.txt\neda/" 
+-e "arbo_check*.txt\narborescence.txt\n*.csv\n*.json\n*.joblib\n*.pkl\nlogs/\nmlruns/\neda/\n__pycache__/\nrequirements - Copie.txt\nsrc/data/live_data_collector - Copie.py\nsrc/data/live_data_collector_before_refactoring.py" 

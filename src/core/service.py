@@ -13,116 +13,34 @@ __desc__ = "FastAPI service exposing prediction endpoints for incident_duration_
 import uvicorn
 import joblib
 import pandas as pd
-import json
 from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from pydantic import BaseModel, Field
-from typing import Optional
+from fastapi.security import OAuth2PasswordRequestForm
 from datetime import datetime, timedelta
-from jose import JWTError, jwt
+from pydantic import BaseModel
 import csv
-import os
 import numpy as np
-from dotenv import load_dotenv
-from logging_utils import get_logger
-from prepare_data import create_features
-from train_model import TOP_FEATURES_FILE
-from pathlib import Path
 
-## ============================
-## Logger
-## ============================
+from src.auth.jwt_auth import create_access_token, verify_token
+from src.core.logging_utils import get_logger, log_execution_time_and_path
+
+from src.core.constants import (
+    MODEL_PATH,
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    FAKE_USERS_DB
+)
+
 logger = get_logger(__name__)
 
-## ============================
-## Constants
-## ============================
-## Load environment variables from .env file
-load_dotenv()
-
-## Secret used to encode/decode JWT tokens
-SECRET_KEY = os.getenv("SECRET_KEY")
-ALGORITHM = os.getenv("ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
-
 ## Model directory and filename
-MODEL_DIR = os.getenv("MODEL_DIR", "models")
-MODEL_FILENAME = os.getenv("MODEL_FILENAME", "model_incident_analysis_incident_duration_min.joblib")
-MODEL_PATH = os.path.join(MODEL_DIR, MODEL_FILENAME)
-model = joblib.load(MODEL_PATH)
+model = None
 FEATURE_ORDER = []
 
-try:
-    feature_names = model.feature_names_in_
-    # print("Feature names used during training:")
-    for i, feat in enumerate(feature_names):
-        # print(f"{i+1:02d}. {feat}")
-        FEATURE_ORDER.append(feat)        
-except AttributeError:
-    print("No model loaded.")
-    exit()
-
-## ============================
-## FastAPI app
-## ============================
+## Global FastAPI app (required for route decorators to work)
 app = FastAPI(
     title="Incident Duration Prediction API",
     description="API to predict incident_duration_min with JWT protection.",
     version="1.0.0"
 )
-
-## ============================
-## Auth system
-## ============================
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
-fake_users_db = {"admin": {"username": "admin", "password": "adminpass"}}
-
-## ============================
-## JWT Auth Functions
-## ============================
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    """
-        Create JWT token from user data
-
-        Args:
-            data (dict): Data to encode (e.g., {'sub': 'username'})
-            expires_delta (timedelta, optional): Expiry duration
-
-        Returns:
-            str: Encoded JWT token
-    """
-    
-    to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
-    to_encode.update({"exp": expire})
-    
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-async def verify_token(token: str = Depends(oauth2_scheme)) -> str:
-    """
-        Validate JWT token
-
-        Args:
-            token (str): JWT token from Authorization header
-
-        Returns:
-            str: Username if valid
-
-        Raises:
-            HTTPException: If token invalid
-    """
-    
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        
-        if username is None:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        
-        return username
-    except JWTError as e:
-        logger.error(f"JWT decoding failed: {e}")
-        raise HTTPException(status_code=401, detail="Invalid token")
 
 @app.post("/login", summary="Authenticate and return access token")
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
@@ -139,7 +57,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
             HTTPException: 401 if authentication fails
     """
     
-    user = fake_users_db.get(form_data.username)
+    user = FAKE_USERS_DB.get(form_data.username)
     if not user or user["password"] != form_data.password:
         logger.warning("Invalid login credentials")
         raise HTTPException(
@@ -179,6 +97,9 @@ class IncidentFeatures(BaseModel):
     rain: float
     hour: int
     weekday: int
+    incident_count: int
+    tmc_tableNumber: int
+    tmc_tableVersion: int
 
 ## ============================
 ## Feature engineering (same logic as prepare_data)
@@ -197,11 +118,11 @@ def build_full_feature_vector(input_data: IncidentFeatures) -> pd.DataFrame:
     ## Convert input data to DataFrame
     df = pd.DataFrame([input_data.dict()])
 
-    ## Derived features
+    ## Derived features (fix: use df[...] not df.get(...))
     df["log_length"] = np.log1p(df["length"])
-    df["length_x_jam"] = df["length"] * df.get("jam_factor", 1)  # fallback if jam_factor not provided
-    df["temp_x_slowdown"] = df["temp"] * (df.get("avg_speed", 1) / df.get("free_flow_speed", 1))
-    df["hour_x_jam"] = df["hour"] * df.get("jam_factor", 1)
+    df["length_x_jam"] = df["length"] * df["jam_factor"]
+    df["temp_x_slowdown"] = df["temp"] * (df["avg_speed"] / df["free_flow_speed"])
+    df["hour_x_jam"] = df["hour"] * df["jam_factor"]
     df["hour_x_delay"] = df["hour"] * df["delay_before_start"]
     df["weekday_x_length"] = df["weekday"] * df["length"]
     df["delay_per_km"] = df["delay_before_start"] / (df["length"] + 0.01)
@@ -213,6 +134,7 @@ def build_full_feature_vector(input_data: IncidentFeatures) -> pd.DataFrame:
     df = df[FEATURE_ORDER]
 
     return df
+
     
 @app.post("/predict", summary="Predict incident_duration_min")
 def predict(input_data: IncidentFeatures, username: str = Depends(verify_token)):
@@ -229,22 +151,35 @@ def predict(input_data: IncidentFeatures, username: str = Depends(verify_token))
         Raises:
             HTTPException: If prediction fails due to preprocessing or model errors
     """
-
+    
     logger.info(f"Received prediction request from user: {username}")
 
     try:
-        ## Step 1: Build the feature vector from raw input
-        features_df = build_full_feature_vector(input_data)
+        if isinstance(input_data, dict):
+            input_data = IncidentFeatures(**input_data)
 
-        ## Step 1b: Reorder columns to match training order
-        ## features_df = features_df[feature_order]
-        features_df = features_df[FEATURE_ORDER]
-
-        ## Step 2: Load the trained model
+        ## Step 1: Load the trained model
         logger.info(f"Loading model from: {MODEL_PATH}")
         model = joblib.load(MODEL_PATH)
 
-        ## Step 3: Make prediction
+        ## Step 2: Load FEATURE_ORDER if empty
+        if not FEATURE_ORDER:
+            try:
+                FEATURE_ORDER.extend(model.feature_names_in_)
+                logger.warning("FEATURE_ORDER was empty. Loaded from model during prediction.")
+            except Exception as e:
+                logger.error(f"Unable to load FEATURE_ORDER: {e}")
+                raise HTTPException(status_code=500, detail="Model feature order missing")
+
+        ## Step 3: Construct the vector input
+        features_df = build_full_feature_vector(input_data)
+        logger.debug(f"Features DataFrame before prediction:\n{features_df}")
+        logger.debug(f"DataFrame shape: {features_df.shape}")
+
+        ## Step 4: Re order collumns
+        features_df = features_df[FEATURE_ORDER]
+
+        ## Step 5: Predict
         prediction = model.predict(features_df)[0]
         logger.info(f"Prediction completed: {prediction:.2f} minutes")
 
@@ -263,7 +198,7 @@ async def get_metrics():
             dict: Last row of metrics.csv
     """
     
-    metrics_path = "models/metrics.csv"
+    metrics_path = "metrics/metrics.csv"
     
     try:
         with open(metrics_path, mode="r") as f:
@@ -274,8 +209,36 @@ async def get_metrics():
         logger.error(f"Failed to read metrics.csv: {e}")
         raise HTTPException(status_code=500, detail="Could not read model metrics.")
 
+
+def run_fastapi_service_pipeline(reload: bool = False) -> None:
+    """
+        Load model, extract feature order, and start FastAPI app with uvicorn
+    """
+    
+    global model, FEATURE_ORDER
+
+    ## Load the trained model from file
+    logger.info(f"Loading model from {MODEL_PATH}")
+    model = joblib.load(MODEL_PATH)
+
+    ## Extract feature names used during model training
+    FEATURE_ORDER = []
+    try:
+        FEATURE_ORDER = list(model.feature_names_in_)
+        logger.info(f"Loaded features: {FEATURE_ORDER}")
+    except AttributeError:
+        logger.error("Model does not contain 'feature_names_in_'")
+        exit(1)
+
+    ## Start FastAPI server with live reload for local development
+    #uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+    if reload:
+        uvicorn.run("src.core.service:app", host="0.0.0.0", port=8000, reload=True)
+    else:
+        uvicorn.run(app, host="0.0.0.0", port=8000)
+
 ## ============================
 ## Local execution for debugging
 ## ============================
 if __name__ == "__main__":
-    uvicorn.run("src.service:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)    

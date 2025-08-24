@@ -1,213 +1,337 @@
-''' 
-__author__ = -
+'''
+__author__ = "Georges Nassopoulos"
 __copyright__ = None
 __version__ = "1.0.0"
 __email__ = "georges.nassopoulos@gmail.com"
 __status__ = "Dev"
-__desc__ = "Live traffic, weather, and incident data collection for Paris 8th district, repeated for 1000 rows with API limits and delay handling."
-
-## This code : 
-## 1) Combines traffic, weather & incidents
-## 2) Extracts same data types (real-time snapshot)
-## 3) Targets same district (Paris 8th)
-## 4) Uses periodicity (on demand)
-## 5) Stops on limit imposed by weather API
+__desc__ = "Live data collection script for traffic or incident analysis"
 '''
 
-import requests
 import datetime
-import pandas as pd
-import os
 import time
-import logging
-import sys
-import io
-import json
-sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
-from dotenv import load_dotenv
-import argparse
 import random
+import logging
+import pandas as pd
 
-##  Load API keys from .env file
-load_dotenv()
-TOMTOM_KEY = os.getenv("TOMTOM_KEY")
-WEATHER_KEY = os.getenv("WEATHER_KEY")
+from src.utils.utils import (
+    save_csv
+)
 
-## Define directories and ensure they exist
-os.makedirs('live', exist_ok=True)
-os.makedirs('logs', exist_ok=True)
+from src.utils.utils_api_calls import (
+    get_weather,
+    get_traffic_flow,
+    get_incidents
+)
 
-CSV_PATH = "live/live_data.csv"
+from src.utils.utils_coordinates import (
+    extract_point_list_from_geometry,
+    get_bbox_from_coords,
+    split_bbox
+)
 
-## Call limit parameters (half for historcal half for live)
-## API call tracking
-MAX_CALLS_PER_DAY = 1000 # ==> limit for weather
-CALL_DELAY_SECONDS = 20
-calls_today = 0
+from src.core.constants import (
+    DELTA_BBOX,
+    ARRONDISSEMENTS_PATH,
+    CSV_PATH,
+    MULTIPLE_WEATHER_CALLS,
+    WEATHER_REFRESH_DELAY,
+    MAX_CALLS_PER_DAY,
+    CALL_DELAY_SECONDS,
+    NB_POINTS_TO_COLLECT,
+    BBOX_SPLIT_COUNT,
+    load_api_keys
+)
 
-## Setup logging to file + console
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+calls_today = 0  ## Counter for total API calls (weather)
+last_weather_time = None  ## Last time weather was fetched
+last_weather_data = None  ## Cached result if shared
 
-## File handler
-file_handler = logging.FileHandler("logs/live_data_collector.log")
-file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
-logger.addHandler(file_handler)
+def log_collection_config(arrondissement: int, strategy: str) -> None:
+    """
+        Log initial configuration for the data collection
 
-## Console handler
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
-logger.addHandler(console_handler)
-
-def safe_request(url, params):
-
-    global calls_today
+        Args:
+            arrondissement (int): Selected arrondissement
+            strategy (str): Strategy used for data collection
+    """
     
-    if calls_today >= MAX_CALLS_PER_DAY:
-        logging.warning("Max daily API calls reached.")
-        raise Exception("API limit reached")
-        
-    time.sleep(CALL_DELAY_SECONDS)
-    r = requests.get(url, params=params)
-    
-    calls_today += 1
-    
-    return r
+    logging.info("=== STARTING LIVE DATA COLLECTION ===")
+    logging.info(f"Arrondissement selected: {arrondissement}")
+    logging.info(f"Strategy selected: {strategy}")
+    logging.info(f"CSV output path: {CSV_PATH}")
+    logging.info(f"Weather mode: {'MULTIPLE' if MULTIPLE_WEATHER_CALLS else 'SHARED'}")
+    logging.info(f"Weather refresh delay: {WEATHER_REFRESH_DELAY} seconds")
+    logging.info(f"Max API calls allowed: {MAX_CALLS_PER_DAY}")
 
-def get_weather(lat,lon):
+    if strategy == "traffic_analysis":
+        logging.info(f"Number of points to sample: {NB_POINTS_TO_COLLECT}")
+    elif strategy == "incident_analysis":
+        logging.info(f"BBox split count: {BBOX_SPLIT_COUNT}")
 
-    url = "https://api.openweathermap.org/data/2.5/weather"
-    
-    params = {
-        'lat': lat,
-        'lon': lon,
-        'appid': WEATHER_KEY,
-        'units': 'metric'
-    }
-    
-    r = safe_request(url, params)
-    data = r.json()
-    m = data["main"]
-    
-    return {
-        "temp": m["temp"],
-        "wind": data["wind"]["speed"],
-        "rain": data.get("rain", {}).get("1h", 0)
-    }
+def collect(
+    points: list[tuple[float, float]],
+    arrondissement: int
+) -> pd.DataFrame:
+    """
+        Collect weather, traffic, and incident data for each point in a list of coordinates
 
-def get_traffic_flow(lat, lon):   
-    # # Proceed to fetch traffic flow data using the snapped coordinates
-    url = "https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json"
-    
-    params = {
-        'point': f"{lat},{lon}",
-        'key': TOMTOM_KEY
-    }
-    
-    r = safe_request(url, params)
-    data = r.json()
-    
-    if "flowSegmentData" not in data:
-        logging.warning(f"Empty or unexpected response from TomTom Traffic API:\n{data}")
-        raise Exception("Missing flowSegmentData in TomTom response")
-    
-    return {
-        "avg_speed": data["flowSegmentData"]["currentSpeed"],
-        "free_flow_speed": data["flowSegmentData"]["freeFlowSpeed"],
-        "jam_factor": data["flowSegmentData"]["confidence"]
-    }
+        Args:
+            points (list of tuples): List of (lon, lat) coordinates to analyze
+            arrondissement (int): Selected arrondissement
 
-
-def get_incidents(lat, lon):
-
-    url = "https://api.tomtom.com/traffic/services/5/incidentDetails"
+        Returns:
+            pd.DataFrame: DataFrame containing the collected information for each point or incident
+    """
     
-    params = {
-        'bbox': f"{lat-0.01},{lon-0.01},{lat+0.01},{lon+0.01}",
-        'key': TOMTOM_KEY,
-        'fields': 'id',
-        'language': 'en'
-    }
+    global last_weather_time, last_weather_data
+
+    collected_rows = []
+
+    for lon, lat in points:
+        try:
+            ts = datetime.datetime.now().replace(microsecond=0)
+
+            ## Weather data
+            if MULTIPLE_WEATHER_CALLS:
+                weather = get_weather(lat, lon)
+            else:
+                if last_weather_time is None or (datetime.datetime.now() - last_weather_time).total_seconds() > WEATHER_REFRESH_DELAY:
+                    last_weather_data = get_weather(lat, lon)
+                    last_weather_time = datetime.datetime.now()
+                weather = last_weather_data
+
+            ## Traffic data
+            traffic = get_traffic_flow(lat, lon)
+
+            ## Incidents list
+            incidents_list = get_incidents(lat - DELTA_BBOX, lon - DELTA_BBOX, lat + DELTA_BBOX, lon + DELTA_BBOX)
+
+            if not incidents_list:
+                ## No incident found, create base row
+                row = {
+                    "timestamp": ts.isoformat(),
+                    "lat": lat,
+                    "lon": lon,
+                    "center_lat": lat,
+                    "center_lon": lon,                    
+                    "incident_count": 0,
+                    "incident_magnitudes": [],
+                    "incident_delays": [],
+                    "incident_roads": [],
+                    **traffic,
+                    **weather
+                }
+                df_row = pd.DataFrame([row])
+                save_csv(df_row, arrondissement, strategy = "traffic_analysis")
+                collected_rows.append(row)
+                logging.info(f"No incidents at {lat},{lon}, base row saved.")
+            else:
+                ## When multiple incidents are found
+                for i, inc in enumerate(incidents_list, start=1):
+                    coords = inc.get("incident_coords", [[lon, lat]])
+                    lon_ref, lat_ref = coords[0][0], coords[0][1] if coords and len(coords[0]) == 2 else (lon, lat)
+
+                    row = {
+                        "timestamp": ts.isoformat(),
+                        "lat": lat_ref,
+                        "lon": lon_ref,
+                        "center_lat": lat,
+                        "center_lon": lon,                        
+                        **inc,
+                        **traffic,
+                        **weather
+                    }
+                    df_row = pd.DataFrame([row])
+                    save_csv(df_row, arrondissement, strategy = "traffic_analysis")
+                    collected_rows.append(row)
+                    logging.info(f"[{i}/{len(incidents_list)}] Incident at {lat_ref},{lon_ref} collected.")
+
+        except Exception as e:
+            logging.warning(f"Failed at {lat},{lon}: {e}")
+
+    df = pd.DataFrame(collected_rows)
+
+    ## Reorder columns for readability
+    columns_order = [
+            "timestamp", "lat", "lon", "center_lat", "center_lon", "incident_coords", "incident_count",
+            "incident_magnitudes", "incident_delays", "incident_roads", "incident_id", "icon_category",
+            "start_time", "end_time", "from_location", "to_location", "length", "time_validity",
+            "probability", "num_reports", "last_report", "tmc_countryCode", "tmc_tableNumber",
+            "tmc_tableVersion", "tmc_direction", "event_descriptions", "avg_speed", "free_flow_speed",
+            "jam_factor", "temp", "wind", "rain"
+    ]
+
+    ## Keep only columns that exist in the final DataFrame
+    columns_order = [col for col in columns_order if col in df.columns]
+    return df[columns_order]
+
+def collect_from_bbox(
+    lat1: float,
+    lon1: float,
+    lat2: float,
+    lon2: float,
+    arrondissement: int
+) -> pd.DataFrame:
+    """
+        Collects incidents within a bounding box and enriches them with traffic and weather data
+
+        Args:
+            lat1 (float): Southern latitude of the bounding box
+            lon1 (float): Western longitude of the bounding box
+            lat2 (float): Northern latitude of the bounding box
+            lon2 (float): Eastern longitude of the bounding box
+            arrondissement (int): Selected arrondissement
+
+        Returns:
+            pd.DataFrame: DataFrame with one row per incident enriched with traffic and weather data
+    """
     
-    r = safe_request(url, params)
-    data = r.json()
-    
-    return {
-        "incident_count": len(data.get("incidents", []))
-    }
+    global last_weather_time, last_weather_data
+    collected_rows = []
 
-def get_last_timestamp():
-
-    if os.path.exists(CSV_PATH):
-        
-        df = pd.read_csv(CSV_PATH)
-        
-        if "timestamp" in df.columns:
-            df["timestamp"] = pd.to_datetime(df["timestamp"])
-            return df["timestamp"].max()
-            
-    return None
-
-def extract_point_list_from_geometry(geometry_str):
-    geom = json.loads(geometry_str)
-    coords = geom["coordinates"][0]
-    return coords
-
-def collect(lat, lon):
     try:
-        ts = datetime.datetime.now().replace(microsecond=0)
-        traffic = get_traffic_flow(lat, lon)
-        weather = get_weather(lat, lon)
-        incidents = get_incidents(lat, lon)
-        row = {
-            "timestamp": ts.isoformat(),
-            "lat": lat,         # added latitude
-            "lon": lon,         # added longitude
-            **incidents,
-            **traffic,
-            **weather
-        }
-        return pd.DataFrame([row])
+        ## Unified call to get all incidents in the bounding box
+        incidents_list = get_incidents(lat1, lon1, lat2, lon2)
+        total = len(incidents_list)
+        logging.info(f"{total} incident features found in this bbox. Beginning data collection...")
+
+        for i, inc in enumerate(incidents_list, start=1):
+            lat, lon = inc["lat"], inc["lon"]
+            logging.info(f"[{i}/{total}] Collecting incident at {lat},{lon}")
+            ts = datetime.datetime.now().replace(microsecond=0)
+
+            try:
+                ## Weather
+                if MULTIPLE_WEATHER_CALLS:
+                    weather = get_weather(lat, lon)
+                else:
+                    if last_weather_time is None or (ts- last_weather_time).total_seconds() > WEATHER_REFRESH_DELAY:
+                        last_weather_data = get_weather(lat, lon)
+                        last_weather_time = ts 
+                    weather = last_weather_data
+
+                ## Traffic
+                traffic = get_traffic_flow(lat, lon)
+
+                ## Assemble one row per incident
+                row = {
+                    "timestamp": ts.isoformat(),
+                    "lat": lat,
+                    "lon": lon,
+                    **inc,
+                    **traffic,
+                    **weather
+                }
+
+                ## Save the row to disk and memory
+                df_row = pd.DataFrame([row])
+                save_csv(df_row, arrondissement, strategy = "incident_analysis")
+                collected_rows.append(row)
+
+                logging.info(f"[{i}/{total}] Data collected and saved.")
+
+            except Exception as e:
+                logging.warning(f"[{i}/{total}] Failed at {lat},{lon}: {e}")
+
     except Exception as e:
-        logging.error(f"Data collection failed: {e}")
-        return None
+        logging.warning(f"Failed bbox {lat1},{lon1},{lat2},{lon2} : {e}")
 
+    df = pd.DataFrame(collected_rows)
 
-def save_csv(df,arrondissement):
-    new_csv_path = CSV_PATH.replace(".csv",f'_{arrondissement}.csv')
-    if os.path.exists(new_csv_path):
-        df.to_csv(new_csv_path, mode='a', header=False, index=False)
-    else:
-        df.to_csv(new_csv_path, index=False)
+    ## Final column order for readability and consistency
+    columns_order = [
+            "timestamp", "lat", "lon", "incident_coords", "incident_count", "incident_magnitudes",
+            "incident_delays", "incident_roads", "incident_id", "icon_category", "start_time",
+            "end_time", "from_location", "to_location", "length", "time_validity", "probability",
+            "num_reports", "last_report", "tmc_countryCode", "tmc_tableNumber", "tmc_tableVersion",
+            "tmc_direction", "event_descriptions", "avg_speed", "free_flow_speed", "jam_factor",
+            "temp", "wind", "rain"
+    ]
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument("--arrondissement", help="Paris arrondissement from 1 to 20", type=int, default=8)
-
-    args = parser.parse_args()
-
-    arrondissement = args.arrondissement
-
-    point_list = extract_point_list_from_geometry (
-        pd.read_csv("src/data/arrondissements.csv").iloc[arrondissement-1]["Geometry"])
-    print("Total of points at arrondissement {} : {}".format(arrondissement,len(point_list)),flush=True)
+    ## Filter out missing columns to avoid errors
+    columns_order = [col for col in columns_order if col in df.columns]
     
+    return df[columns_order]
+
+def run_live_data_pipeline(arrondissement: int, strategy: str) -> None:
+    """
+        Run the live data collection loop using the specified strategy
+
+        Args:
+            arrondissement (int): Paris arrondissement number
+            strategy (str): 'traffic_analysis' or 'incident_analysis'
+    """
+    
+    ## Load API keys from .env or config
+    tomtom_key, weather_key = load_api_keys(arrondissement)
+
+    ## Load the polygon geometry of the selected arrondissement
+    df_arr = pd.read_csv(ARRONDISSEMENTS_PATH)
+    geometry = df_arr.iloc[arrondissement - 1]["Geometry"]
+
+    ## Convert geometry string into a list of coordinate points
+    points = extract_point_list_from_geometry(geometry)
+
+    ## Log collection config (strategy and arrondissement)
+    log_collection_config(arrondissement, strategy)
+
+    ## Initialize tracking variables
     success_count = 0
-    MAX_ROWS = 1000 ## successfull calls per day
+    max_rows = 10000  ## Max number of rows to collect
+    calls_today = 0   ## Tracks API calls made today (should be centralized globally)
 
-    while success_count < MAX_ROWS and calls_today + 3 <= MAX_CALLS_PER_DAY:
-        lon,lat = random.choice(point_list) ## Will always be random inside the point list
-        df = collect(lat,lon)
-        print("Extracting data from point {},{}".format(lat,lon),flush=True)
-        if df is not None:
-            save_csv(df,arrondissement)
-            success_count += 1
-            logging.info(f"Progress: {success_count}/{MAX_ROWS} rows collected.")
+    ## Main data collection loop
+    while success_count < max_rows and calls_today + 3 <= MAX_CALLS_PER_DAY:
+
+        ## Strategy 1: Random sampling inside polygon
+        if strategy == "traffic_analysis":
+            sampled_points = random.sample(points, min(NB_POINTS_TO_COLLECT, len(points)))
+            logging.info(f"Sampling {len(sampled_points)} points for traffic analysis.")
+
+            ## Collect traffic and weather data for these sampled points
+            df = collect(sampled_points, arrondissement)
+
+        ## Strategy 2: Use incidents within bounding boxes
+        elif strategy == "incident_analysis":
+
+            ## Split bounding box into smaller ones to avoid overloading
+            bboxes = split_bbox(*get_bbox_from_coords(points), BBOX_SPLIT_COUNT)
+
+            for i, bbox in enumerate(bboxes, start=1):
+                logging.info(f"[{i}/{len(bboxes)}] Processing bbox: {bbox}")
+
+                ## Collect incident and weather data from this sub-bbox
+                df = collect_from_bbox(*bbox, arrondissement)
+                logging.info(f"Collected {len(df)} rows from bbox.")
+
+                ## Update success counter only if data was returned
+                if df is not None and not df.empty:
+                    success_count += len(df)
+                    logging.info(f"Progress: {success_count}/{max_rows} rows collected.")
+                else:
+                    logging.warning("No data collected from this bbox.")
+
+                ## Break early if we’ve reached our limits
+                if success_count >= max_rows or calls_today + 3 > MAX_CALLS_PER_DAY:
+                    break
+
+                logging.info("Sleeping to respect API delay...")
+                time.sleep(CALL_DELAY_SECONDS)
+
+        ## Unknown strategy
         else:
-            logging.warning("No data collected, retrying after delay.")
+            logging.error("Unknown strategy selected. Exiting.")
+            return
 
+        ## Handle empty DataFrame if no data was collected
+        if df is not None and not df.empty:
+            logging.info(f"Progress updated: {success_count}/{max_rows} rows total.")
+        else:
+            logging.warning("Empty dataframe collected. Retrying after short delay.")
+
+        ## Respect delay between API calls
         time.sleep(CALL_DELAY_SECONDS)
 
-    logging.info(f"Live data collection completed: {success_count} rows collected.")
-    print(f"Finished collecting {success_count} live entries.")
+    ## End of collection process
+    logging.info(f"=== FINISHED: {success_count} rows collected in total ===")
+    logging.info(f"Finished collecting {success_count} live entries.")
