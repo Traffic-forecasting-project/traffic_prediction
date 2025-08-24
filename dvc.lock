@@ -1,29 +1,42 @@
 schema: '2.0'
 stages:
   train:
-    cmd: python src/model/train_model.py
+    cmd: echo 5 | python main.py
     deps:
-    - path: src/data/raw
+    - path: data/processed
       hash: md5
-      md5: 3d9cc43759ea061bf6722743f6045d68.dir
-      size: 20466579
-      nfiles: 7
+      md5: d743bcad46866fdaca25d7ad3ac6af9d.dir
+      size: 102767078
+      nfiles: 3
     - path: src/model/train_model.py
       hash: md5
-      md5: 1b468b3f492320fa13314d5a6c45f12e
-      size: 12135
+      md5: 5cf0d18255ceadba7212a024c4ebfc38
+      size: 10456
     outs:
-    - path: exports
+    - path: model/
       hash: md5
-      md5: ae0c71e1cf509a52cead9a9778aaa792.dir
-      size: 81969701
+      md5: 1ec34ca6e6c3b44f3f6cb5b731bcd2c5.dir
+      size: 527230159
       nfiles: 4
-    - path: metrics/model_stats.csv
+  prepare_data:
+    cmd: echo 3 | python main.py
+    deps:
+    - path: data/raw
       hash: md5
-      md5: ae7c32456a69c6ada191cbddc04bae39
-      size: 595
-    - path: models
+      md5: e4c1369c2961e2ceda20bdcb32db5993.dir
+      size: 45876050
+      nfiles: 9
+    - path: main.py
       hash: md5
-      md5: 68004b334565609907d16751bf08533b.dir
-      size: 344024598
-      nfiles: 4
+      md5: dfe572c5cbfdad93c8cc6f60b414abe3
+      size: 5761
+    - path: src/data/prepare_data.py
+      hash: md5
+      md5: 132b43e0ebf29256cd3a5662abee3e6a
+      size: 21097
+    outs:
+    - path: data/processed/
+      hash: md5
+      md5: 47150e9ca95e674ab79021da923e6823.dir
+      size: 108688893
+      nfiles: 3

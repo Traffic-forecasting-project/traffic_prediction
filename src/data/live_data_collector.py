@@ -1,5 +1,6 @@
 '''
 __author__ = "Georges Nassopoulos"
+__contributors__ = "Mateo Villa Arias"
 __copyright__ = None
 __version__ = "1.0.0"
 __email__ = "georges.nassopoulos@gmail.com"
@@ -12,23 +13,21 @@ import time
 import random
 import logging
 import pandas as pd
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
-from src.utils.utils import (
-    save_csv
-)
-
+from src.utils.utils import save_csv
 from src.utils.utils_api_calls import (
     get_weather,
     get_traffic_flow,
     get_incidents
 )
-
 from src.utils.utils_coordinates import (
     extract_point_list_from_geometry,
     get_bbox_from_coords,
     split_bbox
 )
-
 from src.core.constants import (
     DELTA_BBOX,
     ARRONDISSEMENTS_PATH,
@@ -39,12 +38,13 @@ from src.core.constants import (
     CALL_DELAY_SECONDS,
     NB_POINTS_TO_COLLECT,
     BBOX_SPLIT_COUNT,
-    load_api_keys
 )
 
 calls_today = 0  ## Counter for total API calls (weather)
 last_weather_time = None  ## Last time weather was fetched
 last_weather_data = None  ## Cached result if shared
+tomtom_key = None
+weather_key = None
 
 def log_collection_config(arrondissement: int, strategy: str) -> None:
     """
@@ -93,18 +93,24 @@ def collect(
 
             ## Weather data
             if MULTIPLE_WEATHER_CALLS:
-                weather = get_weather(lat, lon)
+                weather = get_weather(weather_key, lat, lon)
             else:
                 if last_weather_time is None or (datetime.datetime.now() - last_weather_time).total_seconds() > WEATHER_REFRESH_DELAY:
-                    last_weather_data = get_weather(lat, lon)
+                    last_weather_data = get_weather(weather_key, lat, lon)
                     last_weather_time = datetime.datetime.now()
                 weather = last_weather_data
 
             ## Traffic data
-            traffic = get_traffic_flow(lat, lon)
+            traffic = get_traffic_flow(tomtom_key, lat, lon)
 
             ## Incidents list
-            incidents_list = get_incidents(lat - DELTA_BBOX, lon - DELTA_BBOX, lat + DELTA_BBOX, lon + DELTA_BBOX)
+            incidents_list = get_incidents(
+                tomtom_key,
+                lat - DELTA_BBOX,
+                lon - DELTA_BBOX,
+                lat + DELTA_BBOX,
+                lon + DELTA_BBOX
+            )
 
             if not incidents_list:
                 ## No incident found, create base row
@@ -113,7 +119,7 @@ def collect(
                     "lat": lat,
                     "lon": lon,
                     "center_lat": lat,
-                    "center_lon": lon,                    
+                    "center_lon": lon,
                     "incident_count": 0,
                     "incident_magnitudes": [],
                     "incident_delays": [],
@@ -122,27 +128,26 @@ def collect(
                     **weather
                 }
                 df_row = pd.DataFrame([row])
-                save_csv(df_row, arrondissement, strategy = "traffic_analysis")
+                save_csv(df_row, arrondissement, strategy="traffic_analysis")
                 collected_rows.append(row)
                 logging.info(f"No incidents at {lat},{lon}, base row saved.")
             else:
                 ## When multiple incidents are found
                 for i, inc in enumerate(incidents_list, start=1):
                     coords = inc.get("incident_coords", [[lon, lat]])
-                    lon_ref, lat_ref = coords[0][0], coords[0][1] if coords and len(coords[0]) == 2 else (lon, lat)
-
+                    lon_ref, lat_ref = coords[0] if coords and len(coords[0]) == 2 else (lon, lat)
                     row = {
                         "timestamp": ts.isoformat(),
                         "lat": lat_ref,
                         "lon": lon_ref,
                         "center_lat": lat,
-                        "center_lon": lon,                        
+                        "center_lon": lon,
                         **inc,
                         **traffic,
                         **weather
                     }
                     df_row = pd.DataFrame([row])
-                    save_csv(df_row, arrondissement, strategy = "traffic_analysis")
+                    save_csv(df_row, arrondissement, strategy="traffic_analysis")
                     collected_rows.append(row)
                     logging.info(f"[{i}/{len(incidents_list)}] Incident at {lat_ref},{lon_ref} collected.")
 
@@ -191,7 +196,7 @@ def collect_from_bbox(
 
     try:
         ## Unified call to get all incidents in the bounding box
-        incidents_list = get_incidents(lat1, lon1, lat2, lon2)
+        incidents_list = get_incidents(tomtom_key, lat1, lon1, lat2, lon2)
         total = len(incidents_list)
         logging.info(f"{total} incident features found in this bbox. Beginning data collection...")
 
@@ -203,15 +208,15 @@ def collect_from_bbox(
             try:
                 ## Weather
                 if MULTIPLE_WEATHER_CALLS:
-                    weather = get_weather(lat, lon)
+                    weather = get_weather(weather_key, lat, lon)
                 else:
-                    if last_weather_time is None or (ts- last_weather_time).total_seconds() > WEATHER_REFRESH_DELAY:
-                        last_weather_data = get_weather(lat, lon)
-                        last_weather_time = ts 
+                    if last_weather_time is None or (ts - last_weather_time).total_seconds() > WEATHER_REFRESH_DELAY:
+                        last_weather_data = get_weather(weather_key, lat, lon)
+                        last_weather_time = ts
                     weather = last_weather_data
 
                 ## Traffic
-                traffic = get_traffic_flow(lat, lon)
+                traffic = get_traffic_flow(tomtom_key, lat, lon)
 
                 ## Assemble one row per incident
                 row = {
@@ -225,9 +230,8 @@ def collect_from_bbox(
 
                 ## Save the row to disk and memory
                 df_row = pd.DataFrame([row])
-                save_csv(df_row, arrondissement, strategy = "incident_analysis")
+                save_csv(df_row, arrondissement, strategy="incident_analysis")
                 collected_rows.append(row)
-
                 logging.info(f"[{i}/{total}] Data collected and saved.")
 
             except Exception as e:
@@ -240,17 +244,17 @@ def collect_from_bbox(
 
     ## Final column order for readability and consistency
     columns_order = [
-            "timestamp", "lat", "lon", "incident_coords", "incident_count", "incident_magnitudes",
-            "incident_delays", "incident_roads", "incident_id", "icon_category", "start_time",
-            "end_time", "from_location", "to_location", "length", "time_validity", "probability",
-            "num_reports", "last_report", "tmc_countryCode", "tmc_tableNumber", "tmc_tableVersion",
-            "tmc_direction", "event_descriptions", "avg_speed", "free_flow_speed", "jam_factor",
-            "temp", "wind", "rain"
+        "timestamp","lat","lon","incident_coords","incident_count",
+        "incident_magnitudes","incident_delays","incident_roads","incident_id",
+        "icon_category","start_time","end_time","from_location","to_location",
+        "length","time_validity","probability","num_reports","last_report",
+        "tmc_countryCode","tmc_tableNumber","tmc_tableVersion","tmc_direction",
+        "event_descriptions","avg_speed","free_flow_speed","jam_factor","temp",
+        "wind","rain"
     ]
 
     ## Filter out missing columns to avoid errors
     columns_order = [col for col in columns_order if col in df.columns]
-    
     return df[columns_order]
 
 def run_live_data_pipeline(arrondissement: int, strategy: str) -> None:
@@ -261,7 +265,8 @@ def run_live_data_pipeline(arrondissement: int, strategy: str) -> None:
             arrondissement (int): Paris arrondissement number
             strategy (str): 'traffic_analysis' or 'incident_analysis'
     """
-    
+
+    global tomtom_key, weather_key, calls_today
     ## Load API keys from .env or config
     tomtom_key, weather_key = load_api_keys(arrondissement)
 
@@ -293,7 +298,6 @@ def run_live_data_pipeline(arrondissement: int, strategy: str) -> None:
 
         ## Strategy 2: Use incidents within bounding boxes
         elif strategy == "incident_analysis":
-
             ## Split bounding box into smaller ones to avoid overloading
             bboxes = split_bbox(*get_bbox_from_coords(points), BBOX_SPLIT_COUNT)
 
@@ -335,3 +339,18 @@ def run_live_data_pipeline(arrondissement: int, strategy: str) -> None:
     ## End of collection process
     logging.info(f"=== FINISHED: {success_count} rows collected in total ===")
     logging.info(f"Finished collecting {success_count} live entries.")
+
+def load_api_keys(arrondissement: int) -> tuple:
+    """
+        Load TOMTOM and WEATHER API keys from environment variables
+
+        Args:
+            arrondissement (int): Arrondissement number
+
+        Returns:
+            tuple: (TOMTOM_KEY, WEATHER_KEY)
+    """
+    
+    tomtom_key = os.getenv(f"TOMTOM_KEY_{arrondissement}")
+    weather_key = os.getenv(f"WEATHER_KEY_{arrondissement}")
+    return tomtom_key, weather_key

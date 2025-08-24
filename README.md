@@ -83,8 +83,6 @@ python main.py
 
 ---
 
-
-
 ## Data Sources
 
 - **Incidents and traffic**: [TomTom Traffic API](https://developer.tomtom.com/traffic-api/api-explorer)
@@ -122,6 +120,84 @@ The figure below illustrates the two possible strategies for data extraction:
 
 ---
 
+## Data Synchronization and DVC/Dagshub File Versioning
+
+This repository uses **DVC** to track data and models important for the project.
+
+### Tracked files
+- **data/raw/** → raw `.csv` files storing collected data for each Paris district
+- **data/processed/** → processed features for training
+- **model/** → model artifacts
+
+---
+
+### Setup
+
+Install and initialize DVC with S3 support:
+```
+pip install "dvc[s3]"
+dvc init
+```
+Configure the DagsHub remote:
+```
+dvc remote add -d origin s3://dvc/mateovillaarias/traffic_prediction
+dvc remote modify origin endpointurl https://dagshub.com
+```
+Local-only credentials (never commit these)
+```
+export DAGSHUB_USER="your_username"
+export DAGSHUB_TOKEN="your_personal_access_token"
+dvc remote modify origin --local access_key_id $DAGSHUB_USER
+dvc remote modify origin --local secret_access_key $DAGSHUB_TOKEN
+```
+**Mandatory:** once the remote is set, pull the latest data:
+```
+dvc pull
+```
+---
+
+### Usage
+
+Collected live data is stored in `data/live/` (per district `.csv` files).  
+
+- To synchronize `data/live` into the main dataset in `data/raw`, run option 2 in `main.py`:
+```
+python main.py
+```
+```
+=== TRAFFIC LIVE DATA MENU ===
+...
+2. Sync live files into raw directory
+...
+Select an option: 2
+Delete live files after sync? (y/n): n
+```
+
+- After synchronization, you can push data and models to DVC using option 8:
+```
+python main.py
+
+=== TRAFFIC LIVE DATA MENU ===
+...
+8. Push data to DVC remote
+...
+Select an option: 8
+DVC remote name, leave blank for default:
+Git commit message, leave blank for default:
+Select what to push [raw/processed/train/all] (default: raw): raw
+```
+- **This will:**
+  - Commit changes (dvc commit, git add, git commit)
+  - Push to the configured DagsHub remote
+
+
+- **Option 8** works with:
+  - raw → pushes data/raw
+  - processed → pushes data/processed
+  - train → pushes model/
+  - all → pushes all of the above
+
+
 
 ## 🛠 Tech Stack
 
@@ -130,6 +206,7 @@ The figure below illustrates the two possible strategies for data extraction:
 - **TomTom** and **OpenWeatherMap** APIs
 - **Pandas**, **Scikit-learn**, **Joblib**
 - **DVC** for data and model versioning
+- **Dagshub** for data storage and DVC integration with Github repo
 - *(Planned)*: uv, authorisation, monitoring, CI tools
 
 

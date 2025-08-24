@@ -41,9 +41,9 @@ FAKE_USERS_DB = {"admin": {"username": "admin", "password": "adminpass"}}
 ## ========================
 ## FILE PATHS
 ## ========================
-ARRONDISSEMENTS_PATH = os.path.join(RAW_DATA_DIR, "arrondissements.csv")
+ARRONDISSEMENTS_PATH = os.path.join(DATA_DIR, "arrondissements.csv")
 CSV_PATH = os.path.join(LIVE_DATA_DIR, "live_data.csv")
-TOP_FEATURES_FILE = os.path.join(PROCESSED_DATA_DIR, "feature_importances.json" )
+TOP_FEATURES_FILE = os.path.join(MODELS_DIR, "feature_importances.json" )
 MODEL_PATH = os.path.join(MODELS_DIR, "model_incident_analysis_incident_duration_min.joblib" )
 
 ## ========================
@@ -68,7 +68,7 @@ WEATHER_REFRESH_DELAY = int(os.getenv("WEATHER_REFRESH_DELAY", 360))  ## default
 ## ========================
 ## STRATEGY PARAMETERS
 ## ========================
-STRATEGY = os.getenv("NB_POINTS_TO_COLLECT", "incident_analysis")  ## for traffic_analysis
+STRATEGY = os.getenv("STRATEGY", "incident_analysis")  ## for traffic_analysis
 NB_POINTS_TO_COLLECT = int(os.getenv("NB_POINTS_TO_COLLECT", 20))  ## for traffic_analysis
 BBOX_SPLIT_COUNT = int(os.getenv("BBOX_SPLIT_COUNT", 1))           ## for incident_analysis
 DELTA_BBOX = int(os.getenv("DELTA_BBOX", 0.01))                    ## for traffic_analysis
@@ -93,18 +93,4 @@ TARGET_METADATA = { ## Mapping of all supported targets with allowed strategies
     "mean_magnitude": {"strategies": ["incident_analysis"]},
 }
 
-def load_api_keys(arrondissement: int) -> tuple:
-    """
-        Load TOMTOM and WEATHER API keys from environment variables
-
-        Args:
-            arrondissement (int): Arrondissement number
-
-        Returns:
-            tuple: (TOMTOM_KEY, WEATHER_KEY)
-    """
-    
-    tomtom_key = os.getenv(f"TOMTOM_KEY_{arrondissement}")
-    weather_key = os.getenv(f"WEATHER_KEY_{arrondissement}")
-    
-    return tomtom_key, weather_key
+TIMESTAMP_COLUMN = "timestamp"

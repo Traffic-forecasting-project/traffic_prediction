@@ -15,11 +15,12 @@ from src.utils.utils import convert_to_local_timezone, safe_request
 ## ========================
 ## API Call utilities
 ## ========================
-def get_weather(lat, lon):
+def get_weather(api_key, lat, lon):
     """
         Retrieves current weather data from OpenWeatherMap API for a given location
 
         Args:
+            api_key (str): OpenWeatherMap API key (pass None to use default constant)
             lat (float): Latitude of the location
             lon (float): Longitude of the location
 
@@ -34,7 +35,7 @@ def get_weather(lat, lon):
     params = {
         "lat": lat,
         "lon": lon,
-        "appid": WEATHER_KEY,
+        "appid": api_key or WEATHER_KEY,
         "units": "metric"
     }
 
@@ -53,11 +54,12 @@ def get_weather(lat, lon):
         "rain": rain
     }
 
-def get_traffic_flow(lat, lon):
+def get_traffic_flow(api_key, lat, lon):
     """
         Retrieves real-time traffic flow data from the TomTom Traffic API for a specific location
 
         Args:
+            api_key (str): TomTom API key (pass None to use default constant)
             lat (float): Latitude of the point
             lon (float): Longitude of the point
 
@@ -71,7 +73,7 @@ def get_traffic_flow(lat, lon):
     ## Parameters for the API call
     params = {
         "point": f"{lat},{lon}",
-        "key": TOMTOM_KEY
+        "key": api_key or TOMTOM_KEY
     }
 
     ## Perform API request safely
@@ -96,11 +98,12 @@ def get_traffic_flow(lat, lon):
         "jam_factor": jam_factor
     }
 
-def get_incidents(lat1, lon1, lat2, lon2):
+def get_incidents(api_key, lat1, lon1, lat2, lon2):
     """
         Fetches incident data from TomTom API within a specified bounding box
 
         Args:
+            api_key (str): TomTom API key (pass None to use default constant)
             lat1 (float): Southern latitude of the bounding box
             lon1 (float): Western longitude of the bounding box
             lat2 (float): Northern latitude of the bounding box
@@ -113,13 +116,12 @@ def get_incidents(lat1, lon1, lat2, lon2):
     url = "https://api.tomtom.com/traffic/services/5/incidentDetails"
 
     params = {
-        "key": TOMTOM_KEY,
+        "key": api_key or TOMTOM_KEY,
         "bbox": f"{lon1},{lat1},{lon2},{lat2}",
         "fields": "{incidents{type,geometry{type,coordinates},properties{id,iconCategory,magnitudeOfDelay,events{description,code,iconCategory},startTime,endTime,from,to,length,delay,roadNumbers,timeValidity,probabilityOfOccurrence,numberOfReports,lastReportTime,tmc{countryCode,tableNumber,tableVersion,direction,points{location,offset}}}}}",
         "language": "en-GB",
         "timeValidityFilter": "present"
     }
-
 
     ## Perform API request safely
     r = safe_request(url, params)
@@ -180,12 +182,13 @@ def get_incidents(lat1, lon1, lat2, lon2):
 
     return processed_incidents
 
-def get_incidents_per_coordinate(lat1, lon1, lat2, lon2, ts=None):
+def get_incidents_per_coordinate(api_key, lat1, lon1, lat2, lon2, ts=None):
     """
         [DEPRECATED] Retrieve granular incident data from TomTom API,
         returning one row per coordinate involved in the incident geometry
 
         Args:
+            api_key (str): TomTom API key (pass None to use default constant)
             lat1 (float): Minimum latitude of the bounding box
             lon1 (float): Minimum longitude of the bounding box
             lat2 (float): Maximum latitude of the bounding box
@@ -198,7 +201,7 @@ def get_incidents_per_coordinate(lat1, lon1, lat2, lon2, ts=None):
     url = "https://api.tomtom.com/traffic/services/5/incidentDetails"
 
     params = {
-        "key": TOMTOM_KEY,
+        "key": api_key or TOMTOM_KEY,
         "bbox": f"{lon1},{lat1},{lon2},{lat2}",
         "fields": "{incidents{type,geometry{type,coordinates},properties{id,iconCategory,magnitudeOfDelay,events{description,code,iconCategory},startTime,endTime,from,to,length,delay,roadNumbers,timeValidity,probabilityOfOccurrence,numberOfReports,lastReportTime,tmc{countryCode,tableNumber,tableVersion,direction,points{location,offset}}}}}",
         "language": "en-GB",
