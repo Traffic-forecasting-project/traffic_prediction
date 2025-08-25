@@ -2,9 +2,9 @@ name: CI, tests
 
 on:
   pull_request:
-    branches: [ "main" ]
+    branches: [ "master" ]
   push:
-    branches-ignore: [ "main" ]   # run on all pushes except main
+    branches-ignore: [ "master" ]   # run on all pushes except main
 
 jobs:
   tests:
