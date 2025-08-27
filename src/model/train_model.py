@@ -177,7 +177,9 @@ def train_model(df: pd.DataFrame, strategy: str, target_name: str, regenerate_fe
     logger.info(f"Model saved to {model_path}")
 
     ## === Step 15: Log MLflow tracking ===
-    with mlflow.start_run(run_name=f"{strategy}_{target_name}"):
+    experiment_name = f"{strategy}_{target_name}"
+    mlflow.set_experiment(experiment_name)
+    with mlflow.start_run(run_name=result["model_type"]):
 
         ## Log main parameters
         mlflow.log_param("strategy", strategy)
@@ -192,13 +194,17 @@ def train_model(df: pd.DataFrame, strategy: str, target_name: str, regenerate_fe
                 mlflow.log_metric(key, result[key])
 
         ## Log model artifact
-        mlflow.sklearn.log_model(model, artifact_path="model")
+        mlflow.sklearn.log_model(
+            model,
+            artifact_path="model",
+        )
 
         ## Log trained feature file and importance JSON as artifacts
         ## TODO : move this part elsewhere
-        # mlflow.log_artifact(feature_path)
-        # if os.path.exists(TOP_FEATURES_FILE):
-        #     mlflow.log_artifact(TOP_FEATURES_FILE)
+        if regenerate_features:
+            mlflow.log_artifact(feature_path)
+        if os.path.exists(TOP_FEATURES_FILE):
+            mlflow.log_artifact(TOP_FEATURES_FILE)
 
     return result
 
