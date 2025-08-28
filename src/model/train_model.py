@@ -49,8 +49,8 @@ from src.core.constants import (
     TOP_N_FEATURES,
     MLFLOW_ENABLE_REMOTE,
     MLFLOW_LOCAL_URI,
-    MLFLOW_REMOTE_URL,
-
+    DAGSHUB_REPO_NAME,
+    DAGSHUB_REPO_OWNER,
 )
 
 logger = get_logger("train_model")
@@ -127,7 +127,7 @@ def train_model(df: pd.DataFrame, strategy: str, target_name: str, regenerate_fe
         if target_name in ["incident_duration_min"]:
             y_train = np.log1p(y_train)
             y_test = np.log1p(y_test)
-        model = RandomForestRegressor(n_estimators=100, random_state=42)
+        model = RandomForestRegressor(n_estimators=200, random_state=42)
 
     ## === Step 10: Training and prediction ===
     model.fit(X_train, y_train)

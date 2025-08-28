@@ -201,9 +201,50 @@ def manage_tags(model_name, version=None):
         except Exception as e:
             print(f"Error: {str(e)}")
 
+def manage_aliases(model_name, version):
+    """
+    Interactively manage aliases for a registered model version
+    """
+    client = mlflow.tracking.MlflowClient()
+
+    while True:
+        print("\nAlias Management Options:")
+        print("1. Add alias")
+        print("2. Delete alias")
+        print("3. List current aliases")
+        print("4. Exit alias management")
+
+        choice = input("\nEnter your choice (1-4): ")
+
+        try:
+            if choice == "1":
+                alias = input(f"Enter alias to add to model: {model_name}, version:{version} ")
+                client.set_registered_model_alias(model_name, alias, version)
+                print(f"Alias '{alias}' set successfully")
+
+            elif choice == "2":
+                alias = input("Enter alias to delete: ")
+                client.delete_registered_model_alias(model_name, alias)
+                print(f"Alias '{alias}' deleted successfully")
+
+            elif choice == "3":
+                model_version = client.get_model_version(model_name, version)
+                aliases = model_version.aliases
+                print("\nCurrent aliases:")
+                for a in aliases:
+                    print(f"- {a}")
+
+            elif choice == "4":
+                break
+
+            else:
+                print("Invalid choice, please try again")
+
+        except Exception as e:
+            print(f"Error: {str(e)}")
 
 def run_register_model(
-    experiment_name=None, model_name=None, run_id=None, tags=None
+    experiment_name=None, model_name=None, run_id=None, tags=None, alias = None
 ):
     if MLFLOW_ENABLE_REMOTE :
         dagshub.init(repo_owner=DAGSHUB_REPO_OWNER, 
@@ -237,11 +278,17 @@ def run_register_model(
         model_uri, run_id = get_model_uri(tracking_uri, experiment_name, run_id)
 
         # Ask for model name if it was not provided
-        model_name = input("Select a name for the model:")
+        if model_name is None:
+            model_name = input("Select a name for the model:").strip()
 
 
         # Register model with initial tags
         model_details = register_model(model_uri, model_name, initial_tags)
+
+        # Interactive aliases management
+        print("\nWould you like to manage aliases for this model? (yes/no)")
+        if input().lower().startswith("y"):
+            manage_aliases(model_name, model_details.version)
 
         # Interactive tag management
         print("\nWould you like to manage tags for this model? (yes/no)")
