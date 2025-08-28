@@ -94,3 +94,10 @@ TARGET_METADATA = { ## Mapping of all supported targets with allowed strategies
 }
 
 TIMESTAMP_COLUMN = "timestamp"
+
+
+## ========================
+## EXPERIMENT LOGGING
+## ========================
+
+MLFLOW_REMOTE = os.getenv("MLFLOW_REMOTE", "true").lower() == "true" 
