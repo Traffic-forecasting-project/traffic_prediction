@@ -47,7 +47,10 @@ from src.core.constants import (
     USE_TOP_FEATURES_ONLY,
     TOP_FEATURES_FILE,
     TOP_N_FEATURES,
-    MLFLOW_REMOTE, 
+    MLFLOW_ENABLE_REMOTE,
+    MLFLOW_LOCAL_URI,
+    MLFLOW_REMOTE_URL,
+
 )
 
 logger = get_logger("train_model")
@@ -65,9 +68,12 @@ def train_model(df: pd.DataFrame, strategy: str, target_name: str, regenerate_fe
         Returns:
             dict: Dictionary of metrics and paths related to the trained model
     """
-    if MLFLOW_REMOTE:
-        dagshub.init(repo_owner='mateovillaarias', repo_name='traffic_prediction', mlflow=True)
-
+    if MLFLOW_ENABLE_REMOTE:
+        dagshub.init(repo_owner=DAGSHUB_REPO_OWNER, 
+                     repo_name=DAGSHUB_REPO_NAME,
+                        mlflow=True)
+    else:
+        mlflow.set_tracking_uri(MLFLOW_LOCAL_URI)
     ## === Step 1: Feature engineering regeneration (optional) ===
     if regenerate_features :
         result = create_features(df, data_dir_output, strategy, target_name)

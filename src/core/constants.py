@@ -1,5 +1,6 @@
 '''
 __author__ = "Georges Nassopoulos"
+__contributors__ = "Mateo Villa Arias"
 __copyright__ = None
 __version__ = "1.0.0"
 __email__ = "georges.nassopoulos@gmail.com"
@@ -100,4 +101,9 @@ TIMESTAMP_COLUMN = "timestamp"
 ## EXPERIMENT LOGGING
 ## ========================
 
-MLFLOW_REMOTE = os.getenv("MLFLOW_REMOTE", "true").lower() == "true" 
+MLFLOW_ENABLE_REMOTE = os.getenv("MLFLOW_REMOTE", "true").lower() == "true"
+MLFLOW_REMOTE_URL = "https://dagshub.com/mateovillaarias/traffic_prediction.mlflow"
+MLFLOW_LOCAL_URI = "http://127.0.0.1:8080/"
+MLFLOW_DEFAULT_EXPERIMENT_NAME = "Default"
+DAGSHUB_REPO_OWNER = "mateovillaarias"
+DAGSHUB_REPO_NAME = "traffic_prediction"

@@ -1,6 +1,24 @@
+"""
+__author__ = Mateo Villa Arias
+__copyright__ = None
+__version__ = "1.0.0"
+__email__ = ""
+__status__ = "Dev"
+__desc__ = ""
+"""
+
 import mlflow
 import argparse
 import sys
+import dagshub
+from src.core.constants import (
+    MLFLOW_ENABLE_REMOTE,
+    MLFLOW_REMOTE_URL,
+    MLFLOW_LOCAL_URI,
+    MLFLOW_DEFAULT_EXPERIMENT_NAME,
+    DAGSHUB_REPO_OWNER,
+    DAGSHUB_REPO_NAME,
+)
 
 
 def display_artifacts(client, run_id):
@@ -184,52 +202,52 @@ def manage_tags(model_name, version=None):
             print(f"Error: {str(e)}")
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Register MLflow model and manage tags"
-    )
-    parser.add_argument(
-        "--tracking_uri", type=str, required=True, help="MLflow tracking URI"
-    )
-    parser.add_argument(
-        "--experiment_name", type=str, required=True, help="MLflow experiment name"
-    )
-    parser.add_argument(
-        "--model_name", type=str, required=True, help="Name to register the model under"
-    )
-    parser.add_argument("--run_id", type=str, help="Specific run ID to load (optional)")
-    parser.add_argument(
-        "--tags",
-        type=str,
-        help='Initial tags in format "key1=value1,key2=value2" (optional)',
-    )
-    args = parser.parse_args()
-
+def run_register_model(
+    experiment_name=None, model_name=None, run_id=None, tags=None
+):
+    if MLFLOW_ENABLE_REMOTE :
+        dagshub.init(repo_owner=DAGSHUB_REPO_OWNER, 
+                     repo_name=DAGSHUB_REPO_NAME,
+                        mlflow=True)
+        tracking_uri = MLFLOW_REMOTE_URL
+    else:
+        tracking_uri = MLFLOW_LOCAL_URI
     try:
         # Parse initial tags if provided
         initial_tags = {}
-        if args.tags:
-            for tag_pair in args.tags.split(","):
+        if tags:
+            for tag_pair in tags.split(","):
                 key, value = tag_pair.split("=")
                 initial_tags[key.strip()] = value.strip()
 
+        if experiment_name is None:
+            experiment_name = input(f"Enter experiment name [{MLFLOW_DEFAULT_EXPERIMENT_NAME}]: ").strip() or MLFLOW_DEFAULT_EXPERIMENT_NAME
+        if run_id is None:
+            run_id = input("Enter run id, leave blank to get the last run: ").strip()
+
+        # If no run_id provided, fetch last run from experiment
+        if not run_id:
+            experiment = mlflow.get_experiment_by_name(experiment_name)
+            runs = mlflow.search_runs(experiment_ids=[experiment.experiment_id], order_by=["start_time DESC"], max_results=1)
+            if runs.empty:
+                raise ValueError("No runs found for this experiment")
+            run_id = runs.iloc[0]["run_id"]
+
         # Get model URI
-        model_uri, run_id = get_model_uri(
-            args.tracking_uri, args.experiment_name, args.run_id
-        )
+        model_uri, run_id = get_model_uri(tracking_uri, experiment_name, run_id)
+
+        # Ask for model name if it was not provided
+        model_name = input("Select a name for the model:")
+
 
         # Register model with initial tags
-        model_details = register_model(model_uri, args.model_name, initial_tags)
+        model_details = register_model(model_uri, model_name, initial_tags)
 
         # Interactive tag management
         print("\nWould you like to manage tags for this model? (yes/no)")
         if input().lower().startswith("y"):
-            manage_tags(args.model_name, model_details.version)
+            manage_tags(model_name, model_details.version)
 
     except Exception as e:
         print(f"Error: {str(e)}")
         sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()
