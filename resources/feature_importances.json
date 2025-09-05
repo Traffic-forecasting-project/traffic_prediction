@@ -1,0 +1,17 @@
+[
+  "lat",
+  "lon",
+  "incident_count",
+  "icon_category",
+  "length",
+  "tmc_tableNumber",
+  "tmc_tableVersion",
+  "avg_speed",
+  "free_flow_speed",
+  "jam_factor",
+  "temp",
+  "wind",
+  "rain",
+  "hour",
+  "weekday"
+]
