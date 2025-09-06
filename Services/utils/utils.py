@@ -17,8 +17,8 @@ import requests
 import datetime
 from zoneinfo import ZoneInfo
 
-from src.core.constants import STRATEGY, MAX_CALLS_PER_DAY, CALL_DELAY_SECONDS
-from src.core.logging_utils import get_logger, log_execution_time_and_path
+from Services.FastAPI.src.constants import STRATEGY, MAX_CALLS_PER_DAY, CALL_DELAY_SECONDS
+from Services.FastAPI.src.logging_utils import get_logger, log_execution_time_and_path
 
 calls_today = 0  ## Counter for total API calls (weather)
 last_weather_time = None  ## Last time weather was fetched
@@ -104,8 +104,9 @@ def save_csv(df_row, arrondissement, strategy):
         logger.warning("Unknown strategy, column order not enforced.")
         ordered_columns = df_row.columns.tolist()
 
+    #TODO :
     ## Determine output file based on strategy
-    output_file = f"data/live/live_data_{STRATEGY}.{arrondissement}.csv"
+    output_file = f"Services/DataCollection/data/live/live_data_{STRATEGY}.{arrondissement}.csv"
 
     ## Write header only if file doesn't exist
     header = not os.path.exists(output_file)
@@ -131,27 +132,17 @@ def load_and_merge_files(strategy: str, data_dir: str) -> pd.DataFrame:
 
     ## Construct file pattern based on strategy (e.g., 'live_data_traffic_analysis*')
     pattern = f"live_data_{strategy}*"
-
-    # Print current dir
-    logger.info(f"Current directory: {os.getcwd()}")
-
-    # searching files in os.getcwd() + Services + data_dir
-    full_path = os.path.join(os.getcwd(), "Services", data_dir, pattern)
-
-    logger.info(f"Searching files in: {full_path}")
+    full_path = os.path.join(data_dir, pattern)
 
     ## Search for all files matching the pattern
     files = glob.glob(full_path)
-    logger.info(f"Found {len(files)} files matching pattern '{pattern}' in '{data_dir}'")
 
     ## Loop through each matched file and load it depending on its extension
-    dfs = []
+    dfs = []    
     for file in files:
         if file.endswith(".csv"):
-            print(f"Loading CSV file: {file}")
             dfs.append(pd.read_csv(file, low_memory=False))
         elif file.endswith(".json"):
-            print(f"Loading JSON file: {file}")
             dfs.append(pd.read_json(file))
 
     ## If no files were loaded, raise an error
