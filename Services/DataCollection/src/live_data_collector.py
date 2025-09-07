@@ -274,16 +274,22 @@ def collect_from_bbox(
     columns_order = [col for col in columns_order if col in df.columns]
     return df[columns_order]
 
-def run_live_data_pipeline(arrondissement: int, strategy: str) -> None:
+def run_live_data_pipeline(arrondissement: int | None = None, strategy: str | None = None) -> None:
     """
-        Run the live data collection loop using the specified strategy
+        Run the live data collection loop using the specified strategy.
+        If parameters are None, fall back to environment variables.
 
-        Args:
-            arrondissement (int): Paris arrondissement number
-            strategy (str): 'traffic_analysis' or 'incident_analysis'
+        Env overrides:
+            DATACOLLECTION_DEFAULT_ARRONDISSEMENT
+            DATACOLLECTION_DEFAULT_STRATEGY
+            DATACOLLECTION_MAX_ROWS
     """
-
     global tomtom_key, weather_key, calls_today
+
+    arrondissement = arrondissement or int(os.getenv("DATACOLLECTION_DEFAULT_ARRONDISSEMENT", 17))
+    strategy = strategy or os.getenv("DATACOLLECTION_DEFAULT_STRATEGY", "incident_analysis")
+    max_rows = int(os.getenv("DATACOLLECTION_MAX_ROWS", "10000"))
+
     ## Load API keys from .env or config
     tomtom_key, weather_key = load_api_keys(arrondissement)
 
@@ -381,24 +387,24 @@ if __name__ == "__main__":
     ## Ensure UTF-8 encoding for console output
     sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
 
-    ## Setup logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler("logs/live_data_collector.log"),
-            logging.StreamHandler(sys.stdout)
-        ]
-    )
+    # ## Setup logging
+    # logging.basicConfig(
+    #     level=logging.INFO,
+    #     format="%(asctime)s [%(levelname)s] %(message)s",
+    #     handlers=[
+    #         logging.FileHandler("logs/live_data_collector.log"),
+    #         logging.StreamHandler(sys.stdout)
+    #     ]
+    # )
 
-    #Add print to see if the logging is working
-    logging.info("Logging is set up.")
+    # #Add print to see if the logging is working
+    # logging.info("Logging is set up.")
 
-    ## Ensure directories exist
-    os.makedirs("logs", exist_ok=True)
-    os.makedirs("data", exist_ok=True)
-    os.makedirs("data/raw", exist_ok=True)
-    os.makedirs("data/live", exist_ok=True)
+    # ## Ensure directories exist
+    # os.makedirs("logs", exist_ok=True)
+    # os.makedirs("data", exist_ok=True)
+    # os.makedirs("data/raw", exist_ok=True)
+    # os.makedirs("data/live", exist_ok=True)
 
     ## Valid parameters
     VALID_STRATEGIES = ["traffic_analysis", "incident_analysis"]

@@ -19,7 +19,7 @@ from Services.FastAPI.src.constants import (
     ENABLE_EXTRA_FEATURES
 )
 
-from src.utils.utils import (
+from Services.utils.utils import (
     safe_eval,
     clean_columns_and_rows,
     load_and_merge_files
@@ -401,73 +401,84 @@ def create_features(df: pd.DataFrame, data_dir_output: str, strategy: str, targe
 
     return (df, feature_path)
 
-def run_prepare_data_pipeline(strategy: str, targets_input : list = None, data_dir_input: str = "data/raw", data_dir_output: str = "data/processed") -> None:
+def run_prepare_data_pipeline(strategy: str | None = None,
+                              targets_input: list | str | None = None,
+                              data_dir_input: str | None = None,
+                              data_dir_output: str | None = None) -> None:
     """
-        Run the prepare data (feauture engineering) loop using the specified strategy
+        Run the prepare data (feature engineering) loop using the specified strategy.
+        If arguments are None / empty, fall back to environment variables:
+
+            DATAPREP_DEFAULT_STRATEGY
+            DATAPREP_DEFAULT_INPUT_DIR
+            DATAPREP_DEFAULT_OUTPUT_DIR
+            DATAPREP_DEFAULT_TARGETS (comma-separated)
+            DATAPREP_ENABLE_EXTRA_FEATURES (0/1 or true/false)
 
         Args:
-            strategy (str): 'traffic_analysis' or 'incident_analysis'
-            data_dir_input (str): path to live data collected, by default "data/raw"
-            data_dir_output (str): path to processed data, by default "data/processed"          
+            strategy (str|None)
+            targets_input (list|str|None)
+            data_dir_input (str|None)
+            data_dir_output (str|None)
     """
-    
+    # Resolve env-based defaults
+    strategy = strategy or os.getenv("DATAPREP_DEFAULT_STRATEGY", "incident_analysis")
+    data_dir_input = data_dir_input or os.getenv("DATAPREP_DEFAULT_INPUT_DIR", "Services/DataCollection/data/raw")
+    data_dir_output = data_dir_output or os.getenv("DATAPREP_DEFAULT_OUTPUT_DIR", "Services/DataPreparation/data/processed")
+
+    # Targets: if list empty / blank string -> env
+    if (not targets_input) or (isinstance(targets_input, str) and targets_input.strip() == ""):
+        env_targets = os.getenv("DATAPREP_DEFAULT_TARGETS", "")
+        targets_input = [t.strip() for t in env_targets.split(",") if t.strip()] or None
+
+    # Normalize relative paths (keep absolute as-is)
+    if not os.path.isabs(data_dir_input):
+        data_dir_input = os.path.join(os.getcwd(), data_dir_input)
+    if not os.path.isabs(data_dir_output):
+        data_dir_output = os.path.join(os.getcwd(), data_dir_output)
+
+    os.makedirs(data_dir_output, exist_ok=True)
+
+    logger.info(f"[DataPrep Config] strategy={strategy} input={data_dir_input} output={data_dir_output} targets={targets_input}")
+
+    # Optional override for extra features
+    extra_flag = os.getenv("DATAPREP_ENABLE_EXTRA_FEATURES")
+    if extra_flag:
+        enabled = str(extra_flag).lower() in ("1", "true", "yes", "on")
+        if enabled != ENABLE_EXTRA_FEATURES:
+            logger.info(f"Overriding ENABLE_EXTRA_FEATURES -> {enabled}")
+
     try:
-        ## Load and merge the CSV files for the given strategy
         df = load_and_merge_files(strategy, data_dir_input)
 
-        ## Determine the default targets allowed for this strategy, either default or user provided
         default_targets = [t for t, meta in TARGET_METADATA.items() if strategy in meta["strategies"]]
         selected_targets = targets_input if targets_input else default_targets
-
-        ## Filter valid targets for the current strategy, and return error if no valid targets
         targets = [t for t in selected_targets if strategy in TARGET_METADATA.get(t, {}).get("strategies", [])]
+
         if not targets:
             logger.warning(f"No valid targets for strategy '{strategy}'. Skipping.")
+            return
 
-        ## Loop through each target and train the model
         for target_name in targets:
-
-            logger.info(f"\t TARGET : {target_name} \n")
+            logger.info(f"\t TARGET : {target_name}")
             try:
-                result = create_features(df, data_dir_output, strategy, target_name)
-                df_clean = result[0]
-                feature_path = result[1]               
+                df_clean, feature_path = create_features(df, data_dir_output, strategy, target_name)
                 df_clean.to_csv(feature_path, index=False)
-                logger.info(f"\t Saved feature-engineered DataFrame to {feature_path}")               
+                logger.info(f"\t Saved feature-engineered DataFrame to {feature_path}")
             except Exception as e:
                 logger.warning(f"Error during prepare data for target '{target_name}': {e}")
 
     except Exception as e:
         logger.warning(f"Error while feature engineering strategy '{strategy}': {e}")
 
-
-# def main():
-#     """
-#         Main function to run the data preparation pipeline for all strategies and targets
-#     """
-
-#     logger.info("Starting data preparation pipeline...")
-
-#     strategies = set(meta["strategies"] for meta in TARGET_METADATA.values())
-#     strategies = [s for sublist in strategies for s in sublist]  # Flatten list of lists
-
-#     for strategy in strategies:
-#         logger.info(f"Processing strategy: {strategy}")
-#         run_prepare_data_pipeline(strategy)
-
-#     logger.info("Data preparation pipeline completed.")
-
-
 if __name__ == "__main__":
     import argparse
-
     parser = argparse.ArgumentParser(description="Run prepare_data pipeline")
-    parser.add_argument("--strategy", default="incident_analysis", help="Strategy to use (e.g., incident_analysis)")
-    parser.add_argument("--targets", nargs="*", default="", help="Optional list of targets")
-    parser.add_argument("--input", default="DataCollection/data/raw", help="Input data dir")
-    parser.add_argument("--output", default="DataPreparation/data/processed", help="Output data dir")
+    parser.add_argument("--strategy", default=None, help="Strategy (overrides env)")
+    parser.add_argument("--targets", nargs="*", default=None, help="Optional list of targets (overrides env)")
+    parser.add_argument("--input", default=None, help="Input data dir (overrides env)")
+    parser.add_argument("--output", default=None, help="Output data dir (overrides env)")
     args = parser.parse_args()
-
 
     print("Running prepare data pipeline")
     run_prepare_data_pipeline(
