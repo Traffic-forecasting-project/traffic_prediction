@@ -1,0 +1,16 @@
+defaults:
+  - _self_
+
+collector:
+  arrondissement: 6
+  strategy: traffic_analysis
+  max_rows: 1000
+  call_delay: 10
+  max_calls_per_day: 2500
+  weather_refresh_delay: 360
+  multiple_weather_calls: false
+  bbox_split_count: 1
+  delta_bbox: 0.01
+  arr_file: "data/arrondissements.csv"
+  output_dir: "live"
+  log_dir: "logs"
