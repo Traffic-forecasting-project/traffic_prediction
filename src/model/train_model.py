@@ -13,6 +13,7 @@ import numpy as np
 import joblib
 import os
 import json
+import dagshub
 import mlflow
 import mlflow.sklearn
 
@@ -45,7 +46,11 @@ from src.core.constants import (
     FILTER_STANDARD_INCIDENTS,
     USE_TOP_FEATURES_ONLY,
     TOP_FEATURES_FILE,
-    TOP_N_FEATURES 
+    TOP_N_FEATURES,
+    MLFLOW_ENABLE_REMOTE,
+    MLFLOW_LOCAL_URI,
+    DAGSHUB_REPO_NAME,
+    DAGSHUB_REPO_OWNER,
 )
 
 logger = get_logger("train_model")
@@ -63,7 +68,12 @@ def train_model(df: pd.DataFrame, strategy: str, target_name: str, regenerate_fe
         Returns:
             dict: Dictionary of metrics and paths related to the trained model
     """
-    
+    if MLFLOW_ENABLE_REMOTE:
+        dagshub.init(repo_owner=DAGSHUB_REPO_OWNER, 
+                     repo_name=DAGSHUB_REPO_NAME,
+                        mlflow=True)
+    else:
+        mlflow.set_tracking_uri(MLFLOW_LOCAL_URI)
     ## === Step 1: Feature engineering regeneration (optional) ===
     if regenerate_features :
         result = create_features(df, data_dir_output, strategy, target_name)
@@ -117,7 +127,7 @@ def train_model(df: pd.DataFrame, strategy: str, target_name: str, regenerate_fe
         if target_name in ["incident_duration_min"]:
             y_train = np.log1p(y_train)
             y_test = np.log1p(y_test)
-        model = RandomForestRegressor(n_estimators=100, random_state=42)
+        model = RandomForestRegressor(n_estimators=200, random_state=42)
 
     ## === Step 10: Training and prediction ===
     model.fit(X_train, y_train)
@@ -177,7 +187,9 @@ def train_model(df: pd.DataFrame, strategy: str, target_name: str, regenerate_fe
     logger.info(f"Model saved to {model_path}")
 
     ## === Step 15: Log MLflow tracking ===
-    with mlflow.start_run(run_name=f"{strategy}_{target_name}"):
+    experiment_name = f"{strategy}_{target_name}"
+    mlflow.set_experiment(experiment_name)
+    with mlflow.start_run(run_name=result["model_type"]):
 
         ## Log main parameters
         mlflow.log_param("strategy", strategy)
@@ -192,13 +204,17 @@ def train_model(df: pd.DataFrame, strategy: str, target_name: str, regenerate_fe
                 mlflow.log_metric(key, result[key])
 
         ## Log model artifact
-        mlflow.sklearn.log_model(model, artifact_path="model")
+        mlflow.sklearn.log_model(
+            model,
+            artifact_path="model",
+        )
 
         ## Log trained feature file and importance JSON as artifacts
         ## TODO : move this part elsewhere
-        # mlflow.log_artifact(feature_path)
-        # if os.path.exists(TOP_FEATURES_FILE):
-        #     mlflow.log_artifact(TOP_FEATURES_FILE)
+        if regenerate_features:
+            mlflow.log_artifact(feature_path)
+        if os.path.exists(TOP_FEATURES_FILE):
+            mlflow.log_artifact(TOP_FEATURES_FILE)
 
     return result
 

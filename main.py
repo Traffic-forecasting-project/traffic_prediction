@@ -23,6 +23,7 @@ from src.data.sync_live_to_raw import update_raw_from_live
 from src.data.prepare_data import run_prepare_data_pipeline
 from src.eda.eda_analysis import run_eda_pipeline
 from src.model.train_model import run_train_model_pipeline
+from src.model.register_model import run_register_model
 from src.core.service import run_fastapi_service_pipeline
 
 from src.core.constants import MODEL_PATH
@@ -58,11 +59,6 @@ def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Traffic Pipeline CLI")
     parser.add_argument("-a", "--arrondissement", type=int, default = 17,help="Paris arrondissement (1–20)")
     parser.add_argument("-s", "--strategy", type=str, default="incident_analysis", choices=["incident_analysis", "traffic_analysis", "all"], help="Data/train collection strategy")
-    parser.add_argument("-p", "--prepare", action="store_true", help="Run feature engineering pipeline")
-    parser.add_argument("-t", "--train", action="store_true", help="Train model with prepared dat")   
-    parser.add_argument( "--targets", nargs="*", default=[], help="Optional list of target variables")
-    parser.add_argument("--data_dir", type=str, default="src/data/live", help="Directory containing CSV collected data")
-    parser.add_argument("--output_stats", type=str, default="metrics", help="Path to output stats file")                     
     return parser.parse_args()
 
 def main():
@@ -86,9 +82,10 @@ def main():
     print("3. Run feature engineering on collected data")
     print("4. Run EDA analysis on data")
     print("5. Run train model on data")
-    print("6. Launch FastAPI service with uvicorn")
-    print("7. Run tests avec pytest")
-    print("8. Push data to DVC remote")
+    print("6. Register model for staging")
+    print("7. Launch FastAPI service with uvicorn")
+    print("8. Run tests avec pytest")
+    print("9. Push data to DVC remote")
     print("q. Quit")
     print("==============================")
     choice = input("Select an option: ").strip().lower()
@@ -122,15 +119,17 @@ def main():
         run_train_model_pipeline(strategy)
 
     elif choice == "6":
+        run_register_model()
+    elif choice == "7":
         logger.info(f"Launching FastAPI uvicorn server for routes with trained model path ==> '{MODEL_PATH}'")
         run_fastapi_service_pipeline(reload=True)
 
-    elif choice == "7":
+    elif choice == "8":
         logger.info("Running pytest on tests/")
         retcode = pytest.main(["tests"])
         sys.exit(retcode)
 
-    elif choice == "8":
+    elif choice == "9":
         remote = input("DVC remote name, leave blank for default: ").strip() or None
         msg = input("Git commit message, leave blank for default: ").strip() or None
         dtype = input("Select what to push [raw/processed/train/all] (default: raw): ").strip().lower() or "raw"
