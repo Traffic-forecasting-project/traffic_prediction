@@ -15,6 +15,7 @@ This repository includes:
 - 🤖 **Model training** for multiple incident-related targets
 - 📈 **Evaluation and metrics logging**
 - 📦 **Model deployment** via **FastAPI**
+- 🔑 **Authentication & Authorization** with **JWT tokens** (role-based access: admin, user, guest)
 - 📊 **Strategy comparison**
 - 📊 **Drift monitoring** (optional)
 - 🔁 **Versioning with DVC**
@@ -43,14 +44,14 @@ This repository includes:
 │
 ├── docker/                  # (Optional) Docker structure
 │
-├── src/                     # Source code
-│   ├── auth/                # JWT Auth
-│   ├── core/                # Constants, logger, API service
-│   ├── data/                # Data acquisition & preparation
-│   ├── eda/                 # EDA generation
-│   ├── model/               # Model training
-│   ├── monitoring/          # Drift monitoring (optional)
-│   └── utils/               # Utility functions
+├── src/                     # Source code for the entire pipeline and API
+│   ├── auth/                # JWT-based authentication & role-based authorization
+│   ├── core/                # Core logic: API service, constants, centralized logging
+│   ├── data/                # Data acquisition, synchronization and preprocessing workflows
+│   ├── eda/                 # Exploratory Data Analysis (EDA) scripts and visualizations
+│   ├── model/               # Model training, evaluation and serialization
+│   ├── monitoring/          # Drift detection and monitoring modules (optional)
+│   └── utils/               # General-purpose helper functions shared across modules
 │
 └── tests/                   # API and logic tests
 ```
@@ -118,6 +119,31 @@ The figure below illustrates the two possible strategies for data extraction:
 | **Traffic Analysis**  | Record traffic at fixed points                      | Easy to set up, real-time, no need for incidents  | Many empty calls, low incident yield or non realistic call number to detect               |
 | **Incident Analysis** | Get traffic where incidents occurred (via BBOX)     | Targeted, efficient, good incident coverage       | Misses pre-incident flow, no normal traffic context   |
 
+---
+
+## 🔑 Authentication & Authorization
+
+The API is secured with **JWT tokens**:
+- **Admin**: full access (metrics, prediction, monitoring)
+- **User**: limited access (prediction, test-token)
+- **Guest**: minimal access (healthcheck only)
+
+- Tokens are issued via the `/login` endpoint.
+- Protected endpoints validate tokens with role-based dependencies.
+- Invalid or expired tokens return `401 Unauthorized`.
+- Access to forbidden routes returns `403 Forbidden`.
+
+Example:
+```bash
+# Obtain a token
+curl -X POST http://localhost:8000/login \
+  -d "username=admin&password=adminpass" \
+  -H "Content-Type: application/x-www-form-urlencoded"
+
+# Use token to call a protected endpoint
+curl -X GET http://localhost:8000/metrics \
+  -H "Authorization: Bearer <token>"
+```
 ---
 
 ## Data Synchronization and DVC/Dagshub File Versioning
@@ -207,7 +233,7 @@ Select what to push [raw/processed/train/all] (default: raw): raw
 - **Pandas**, **Scikit-learn**, **Joblib**
 - **DVC** for data and model versioning
 - **Dagshub** for data storage and DVC integration with Github repo
-- *(Planned)*: uv, authorisation, monitoring, CI tools
+- *(Planned)*: uv, airflow, monitoring
 
 
 ---

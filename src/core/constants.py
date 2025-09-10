@@ -37,7 +37,23 @@ RESOURCES_DIR = os.path.join(BASE_DIR, "resources")
 ## ========================
 ## AUTHORIZATION DUMMY USERS
 ## ========================
-FAKE_USERS_DB = {"admin": {"username": "admin", "password": "adminpass"}}
+FAKE_USERS_DB = {
+    "admin": {
+        "username": "admin",
+        "password": "adminpass",
+        "role": "admin"
+    },
+    "user": {
+        "username": "user",
+        "password": "userpass",
+        "role": "user"
+    },
+    "guest": {
+        "username": "guest",
+        "password": "guestpass",
+        "role": "guest"
+    }
+}
 
 ## ========================
 ## FILE PATHS
