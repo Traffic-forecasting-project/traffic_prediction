@@ -1,6 +1,4 @@
-volumes:
-  airflow_db:
-  airflow_logs:
+version: "3.9"
 
 services:
   airflow-init:
@@ -17,6 +15,12 @@ services:
       - ./dags:/opt/airflow/dags
       - airflow_db:/opt/airflow      
       - airflow_logs:/opt/airflow/logs
+    env_file:
+      - .env
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
+      - AIRFLOW_CONN_FS_PROJECT=${AIRFLOW_CONN_FS_PROJECT}
+      - PYTHONPATH=/workspace
     networks:
       - net
     restart: "no"
@@ -32,11 +36,13 @@ services:
     volumes:
       - ./:/workspace 
       - ./dags:/opt/airflow/dags
-      - airflow_db:/opt/airflow        
+      - airflow_db:/opt/airflow
       - airflow_logs:/opt/airflow/logs
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
+      - AIRFLOW_CONN_FS_PROJECT=${AIRFLOW_CONN_FS_PROJECT}
+      - PYTHONPATH=/workspace
     networks:
       - net
 
@@ -51,12 +57,15 @@ services:
     volumes:
       - ./:/workspace 
       - ./dags:/opt/airflow/dags
-      - airflow_db:/opt/airflow          # <-- corriger ici
+      - airflow_db:/opt/airflow
       - airflow_logs:/opt/airflow/logs
       - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
+      - AIRFLOW_CONN_FS_PROJECT=${AIRFLOW_CONN_FS_PROJECT}
+      - PYTHONPATH=/workspace
     networks:
       - net
-
 
   fast_api:
     build: ./Services/FastAPI
@@ -75,28 +84,53 @@ services:
     volumes:
       - ./Services/DataCollection/src:/workspace/Services/DataCollection/src
       - ./Services/DataCollection/data:/workspace/Services/DataCollection/data
+      - ./Services/DataCollection/data:/workspace/Services/data
       - ./Services/utils:/workspace/Services/utils
       - ./Services/FastAPI:/workspace/Services/FastAPI
     environment:
       - PYTHONPATH=/workspace:/workspace/Services/DataCollection/src:/workspace/Services/utils:/workspace/Services/FastAPI
     networks:
       - net
+    tty: true
+    stdin_open: true
 
   data_preparation:
     build: ./Services/DataPreparation
+    image: data_preparation:latest
     volumes:
-    - ./Services/utils:/workspace/Services/utils  
-    image: data_preparation:latest 
-    profiles: ["batch"]
+      - ./Services/DataPreparation/src:/workspace/Services/DataPreparation/src
+      - ./Services/DataCollection/data:/workspace/Services/DataCollection/data
+      - ./Services/utils:/workspace/Services/utils
+      - ./Services/FastAPI:/workspace/Services/FastAPI
+    environment:
+      - PYTHONPATH=/workspace:/workspace/Services/DataPreparation/src:/workspace/Services/utils:/workspace/Services/FastAPI
     networks:
       - net
+    tty: true
+    stdin_open: true
 
-  # model_training:
-  #   build: ./Services/ModelTraining
-  #   image: model_training:latest
-  #   profiles: ["batch"]
-  #   networks:
-  #     - net
+  model_training:
+    build: ./Services/ModelTraining
+    image: model_training:latest
+    volumes:
+      - ./Services/ModelTraining/src:/workspace/Services/ModelTraining/src
+      - ./Services/DataPreparation/data:/workspace/Services/DataPreparation/data
+      - ./Services/DataCollection/data:/workspace/Services/DataCollection/data
+      - ./Services/model:/workspace/Services/model
+      - ./Services/utils:/workspace/Services/utils
+      - ./Services/FastAPI:/workspace/Services/FastAPI
+    environment:
+      - PYTHONPATH=/workspace:/workspace/Services/ModelTraining/src:/workspace/Services/utils:/workspace/Services/FastAPI
+    networks: [net]
+    tty: true
+    stdin_open: true
+
 
 networks:
   net:
+
+volumes:
+  airflow_db:
+  airflow_logs:
+
+    

@@ -8,6 +8,7 @@ __status__ = "Dev"
 __desc__ = "Live data collection script for traffic or incident analysis"
 '''
 
+import argparse
 import datetime
 import time
 import random
@@ -273,8 +274,14 @@ def collect_from_bbox(
     ## Filter out missing columns to avoid errors
     columns_order = [col for col in columns_order if col in df.columns]
     return df[columns_order]
-
-def run_live_data_pipeline(arrondissement: int | None = None, strategy: str | None = None) -> None:
+    
+def run_live_data_pipeline(
+    arrondissement: int | None = None,
+    arrondissement_path: str | None = None,        
+    strategy: str | None = None,
+    max_rows: int | None = None,
+    max_duration: int | None = None
+) -> None:
     """
         Run the live data collection loop using the specified strategy.
         If parameters are None, fall back to environment variables.
@@ -283,18 +290,21 @@ def run_live_data_pipeline(arrondissement: int | None = None, strategy: str | No
             DATACOLLECTION_DEFAULT_ARRONDISSEMENT
             DATACOLLECTION_DEFAULT_STRATEGY
             DATACOLLECTION_MAX_ROWS
+            DATACOLLECTION_MAX_DURATION
     """
+    
     global tomtom_key, weather_key, calls_today
 
     arrondissement = arrondissement or int(os.getenv("DATACOLLECTION_DEFAULT_ARRONDISSEMENT", 17))
     strategy = strategy or os.getenv("DATACOLLECTION_DEFAULT_STRATEGY", "incident_analysis")
-    max_rows = int(os.getenv("DATACOLLECTION_MAX_ROWS", "10000"))
+    max_rows = max_rows or int(os.getenv("DATACOLLECTION_MAX_ROWS", "10000"))
+    max_duration = max_duration or int(os.getenv("DATACOLLECTION_MAX_DURATION", "60"))
 
     ## Load API keys from .env or config
     tomtom_key, weather_key = load_api_keys(arrondissement)
 
     ## Load the polygon geometry of the selected arrondissement
-    df_arr = pd.read_csv(ARRONDISSEMENTS_PATH)
+    df_arr = pd.read_csv(arrondissement_path)
     geometry = df_arr.iloc[arrondissement - 1]["Geometry"]
 
     ## Convert geometry string into a list of coordinate points
@@ -305,11 +315,17 @@ def run_live_data_pipeline(arrondissement: int | None = None, strategy: str | No
 
     ## Initialize tracking variables
     success_count = 0
-    max_rows = 10000  ## Max number of rows to collect
     calls_today = 0   ## Tracks API calls made today (should be centralized globally)
+
+    ## Track start time
+    start_time = time.time()
 
     ## Main data collection loop
     while success_count < max_rows and calls_today + 3 <= MAX_CALLS_PER_DAY:
+        ## Stop if timeout exceeded
+        if time.time() - start_time >= max_duration:
+            logging.info(f"Timeout reached after {max_duration}s, stopping gracefully.")
+            break
 
         ## Strategy 1: Random sampling inside polygon
         if strategy == "traffic_analysis":
@@ -379,13 +395,13 @@ def load_api_keys(arrondissement: int) -> tuple:
     return tomtom_key, weather_key
 
 # Add main with run_live_data_pipeline
-if __name__ == "__main__":
-    import argparse
-    import sys
-    import io
+#if __name__ == "__main__":
+    #import argparse
+    #import sys
+    #import io
 
     ## Ensure UTF-8 encoding for console output
-    sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
+    #sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
 
     # ## Setup logging
     # logging.basicConfig(
@@ -407,30 +423,58 @@ if __name__ == "__main__":
     # os.makedirs("data/live", exist_ok=True)
 
     ## Valid parameters
+    #VALID_STRATEGIES = ["traffic_analysis", "incident_analysis"]
+    #VALID_ARRONDISSEMENTS = list(range(1, 21))
+
+
+def parse_arguments() -> argparse.Namespace:
+    """
+    Parse CLI arguments
+    """
+    parser = argparse.ArgumentParser(description="Live Data Collector CLI")
+    parser.add_argument("-a", "--arrondissement", type=int, default=17,
+                        help="Paris arrondissement (1–20)")
+    parser.add_argument("-s", "--strategy", type=str, default="incident_analysis",
+                        choices=["incident_analysis", "traffic_analysis"],
+                        help="Data collection strategy")
+    parser.add_argument("-r", "--max-rows", type=int,
+                        default=int(os.getenv("DATACOLLECTION_MAX_ROWS", 10000)),
+                        help="Maximum number of rows to collect")
+    parser.add_argument("-t", "--max-duration", type=int,
+                        default=int(os.getenv("DATACOLLECTION_MAX_DURATION", 60)),
+                        help="Timeout in seconds before stopping the loop")
+
+    parser.add_argument("--arrondissements-path", type=str,
+                        default=ARRONDISSEMENTS_PATH,
+                        help="Path to the arrondissements CSV file")
+                          
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    args = parse_arguments()
+
     VALID_STRATEGIES = ["traffic_analysis", "incident_analysis"]
     VALID_ARRONDISSEMENTS = list(range(1, 21))
 
-    def parse_arguments() -> argparse.Namespace:
-        """
-            Parse optional arguments (used only for validation)
-        """
-        
-        parser = argparse.ArgumentParser(description="Live Data Collector CLI")
-        parser.add_argument("-a", "--arrondissement", type=int, default=17, help="Paris arrondissement (1–20)")
-        parser.add_argument("-s", "--strategy", type=str, default="incident_analysis", choices=["incident_analysis", "traffic_analysis"], help="Data collection strategy")
-        return parser.parse_args()
-
-    args = parse_arguments()
-
-    if args.arrondissement is not None and args.arrondissement not in VALID_ARRONDISSEMENTS:
+    if args.arrondissement not in VALID_ARRONDISSEMENTS:
         logging.error(f"Invalid arrondissement '{args.arrondissement}'. Must be between 1 and 20.")
         sys.exit(1)
 
-    if args.strategy is not None and args.strategy not in VALID_STRATEGIES:
+    if args.strategy not in VALID_STRATEGIES:
         logging.error(f"Invalid strategy '{args.strategy}'. Choose from {VALID_STRATEGIES}.")
         sys.exit(1)
 
-    # print 
     print("Starting live data collection...")
-    logging.info(f"Starting live data collection for arrondissement {args.arrondissement} using strategy '{args.strategy}'")
-    run_live_data_pipeline(args.arrondissement, args.strategy)
+    logging.info(
+        f"Starting live data collection for arrondissement {args.arrondissement} "
+        f"using strategy '{args.strategy}'"
+    )
+
+    run_live_data_pipeline(
+        arrondissement=args.arrondissement,
+        arrondissement_path=args.arrondissements_path,       
+        strategy=args.strategy,
+        max_rows=args.max_rows,
+        max_duration=args.max_duration
+    )

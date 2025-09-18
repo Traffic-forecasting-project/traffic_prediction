@@ -1,6 +1,16 @@
 dvc[s3,azure,gs,gdrive,ssh,webdav]>=3.0.0
+dagshub>=0.6.3
 pandas>=2.0.0
 requests>=2.31.0
 python-dotenv>=1.0.0
 tqdm>=4.66.0
 scikit-learn==1.6.1
+mlflow==2.9.2
+httpx==0.26.0
+uvicorn==0.25.0
+joblib==1.2.0
+numpy==1.26.2
+python-multipart==0.0.20
+python-jose==3.3.0
+pytest==7.4.2
+imbalanced-learn==0.14.0

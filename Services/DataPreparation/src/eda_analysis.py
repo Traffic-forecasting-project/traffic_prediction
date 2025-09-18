@@ -14,14 +14,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from io import StringIO 
+from Services.FastAPI.src.logging_utils import get_logger, log_execution_time_and_path
 
-from src.core.logging_utils import get_logger, log_execution_time_and_path
-
-from src.utils.utils import (
+from Services.utils.utils import (
     save_summary_stats
 )
 
-from src.core.constants import (
+from Services.FastAPI.src.constants import (
     TARGETS,
     LIVE_DATA_DIR,
     EDA_OUTPUT_DIR,
@@ -268,7 +267,8 @@ def run_eda_pipeline(strategy: str) -> None:
 
         ## Loop through each target and generate EDA report
         for target in TARGETS:
-            csv_file = f"{PROCESSED_DATA_DIR}/df_features_incident_analysis_{target}.csv"
+            tmp_var = PROCESSED_DATA_DIR.replace("/DataCollection/data/DataPreparation","/DataPreparation/data")
+            csv_file = f"{tmp_var}/df_features_incident_analysis_{target}.csv"
             if os.path.exists(csv_file):
                 logger.info(f"\t Generating EDA report for {target}...")
                 generate_eda_report(csv_file, target)
@@ -278,3 +278,13 @@ def run_eda_pipeline(strategy: str) -> None:
     except Exception as e:
         logger.warning(f"Error while EDA analysis for strategy '{strategy}': {e}")
        
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-s", "--strategy", type=str, default="incident_analysis")
+    args = parser.parse_args()
+
+    run_eda_pipeline(strategy=args.strategy)

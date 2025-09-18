@@ -83,19 +83,18 @@ def advanced_create_features(df: pd.DataFrame, selected_features: list = None) -
         Generate advanced features to improve prediction
         Only used when enable_extra_features is True
 
-        Parameters:
-        -----------
-        df : pd.DataFrame
-            DataFrame containing raw or partially processed input features
-        selected_features : list
-            List of feature names to generate. Valid options include:
-            ['delay_before_start', 'time_until_end', 'minutes_since_last_report',
-             'weekday_flags', 'hour_x_jam', 'time_period']
+        Args:
+            df : pd.DataFrame
+                DataFrame containing raw or partially processed input features
+            selected_features : list
+                List of feature names to generate. Valid options include:
+                ['delay_before_start', 'time_until_end', 'minutes_since_last_report',
+                 'weekday_flags', 'hour_x_jam', 'time_period']
 
         Returns:
-        --------
-        pd.DataFrame
-            DataFrame with new engineered features
+
+            pd.DataFrame
+                DataFrame with new engineered features
     """
 
     if selected_features is None:
@@ -295,7 +294,7 @@ def advanced_create_features(df: pd.DataFrame, selected_features: list = None) -
 
     return df
     
-@log_execution_time_and_path
+#@log_execution_time_and_path
 def create_features(df: pd.DataFrame, data_dir_output: str, strategy: str, target_column: str = "incident_duration_min") -> pd.DataFrame:
     """
         Create additional features from the input DataFrame based on the selected strategy
@@ -426,6 +425,8 @@ def run_prepare_data_pipeline(strategy: str | None = None,
     data_dir_input = data_dir_input or os.getenv("DATAPREP_DEFAULT_INPUT_DIR", "Services/DataCollection/data/raw")
     data_dir_output = data_dir_output or os.getenv("DATAPREP_DEFAULT_OUTPUT_DIR", "Services/DataPreparation/data/processed")
 
+    os.makedirs(data_dir_output, exist_ok=True)
+
     # Targets: if list empty / blank string -> env
     if (not targets_input) or (isinstance(targets_input, str) and targets_input.strip() == ""):
         env_targets = os.getenv("DATAPREP_DEFAULT_TARGETS", "")
@@ -437,6 +438,7 @@ def run_prepare_data_pipeline(strategy: str | None = None,
     if not os.path.isabs(data_dir_output):
         data_dir_output = os.path.join(os.getcwd(), data_dir_output)
 
+    data_dir_output = data_dir_output.replace("/workspace/DataPreparation","/DataPreparation")
     os.makedirs(data_dir_output, exist_ok=True)
 
     logger.info(f"[DataPrep Config] strategy={strategy} input={data_dir_input} output={data_dir_output} targets={targets_input}")
@@ -474,16 +476,27 @@ def run_prepare_data_pipeline(strategy: str | None = None,
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Run prepare_data pipeline")
-    parser.add_argument("--strategy", default=None, help="Strategy (overrides env)")
-    parser.add_argument("--targets", nargs="*", default=None, help="Optional list of targets (overrides env)")
-    parser.add_argument("--input", default=None, help="Input data dir (overrides env)")
-    parser.add_argument("--output", default=None, help="Output data dir (overrides env)")
+    parser.add_argument("--strategy", "-s",  default="incident_analysis", help="Strategy")
+    parser.add_argument("--targets", nargs="*", default=None, help="Optional list of targets")
+    parser.add_argument("--input", default="Services/DataCollection/data/live", help="Input data dir")
+    parser.add_argument("--output", default="Services/DataPreparation/data/processed", help="Output data dir")
     args = parser.parse_args()
 
-    print("Running prepare data pipeline")
+    args = parser.parse_args()
+    
+    ## Set absolute to relative path
+    data_dir_output = args.output
+    if not os.path.isabs(data_dir_output):
+        data_dir_output = os.path.join("/workspace", data_dir_output)
+
+    data_dir_output = data_dir_output.replace("/workspace/Services/","")
+    logger.info("=== Running prepare data pipeline (standalone mode) ===")
+    logger.info(f"=== data_dir_input ==={args.input}")
+    logger.info(f"=== data_dir_output ==={data_dir_output}")
+    
     run_prepare_data_pipeline(
         strategy=args.strategy,
         targets_input=args.targets,
         data_dir_input=args.input,
-        data_dir_output=args.output
+        data_dir_output=data_dir_output
     )

@@ -1,5 +1,6 @@
 '''
 __author__ = "Georges Nassopoulos"
+__contributors__ = "Mateo Villa Arias"
 __copyright__ = None
 __version__ = "1.0.0"
 __email__ = "georges.nassopoulos@gmail.com"
@@ -25,20 +26,34 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 ## BASE DIRECTORIES
 ## ========================
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
-DATA_DIR = os.path.join(BASE_DIR, "DataCollection", "data")
-RAW_DATA_DIR = os.path.join(DATA_DIR, "DataCollection", "raw")
-LIVE_DATA_DIR = os.path.join(DATA_DIR, "DataCollection", "live")
-
-EDA_OUTPUT_DIR = os.path.join(BASE_DIR,"DataPreparation", "eda")
-PROCESSED_DATA_DIR = os.path.join(DATA_DIR, "DataPreparation", "processed")
-
-MODELS_DIR = os.path.join(BASE_DIR, "ModelTraining", "model")
+DATA_DIR = os.path.join(BASE_DIR, "data")
+MODELS_DIR = os.path.join(BASE_DIR, "model")
+EDA_OUTPUT_DIR = os.path.join(BASE_DIR, "eda")
+RAW_DATA_DIR = os.path.join(DATA_DIR, "raw")
+LIVE_DATA_DIR = os.path.join(DATA_DIR, "live")
+PROCESSED_DATA_DIR = os.path.join(DATA_DIR, "processed")
 RESOURCES_DIR = os.path.join(BASE_DIR, "resources")
 
 ## ========================
 ## AUTHORIZATION DUMMY USERS
 ## ========================
-FAKE_USERS_DB = {"admin": {"username": "admin", "password": "adminpass"}}
+FAKE_USERS_DB = {
+    "admin": {
+        "username": "admin",
+        "password": "adminpass",
+        "role": "admin"
+    },
+    "user": {
+        "username": "user",
+        "password": "userpass",
+        "role": "user"
+    },
+    "guest": {
+        "username": "guest",
+        "password": "guestpass",
+        "role": "guest"
+    }
+}
 
 ## ========================
 ## FILE PATHS
@@ -96,3 +111,15 @@ TARGET_METADATA = { ## Mapping of all supported targets with allowed strategies
 }
 
 TIMESTAMP_COLUMN = "timestamp"
+
+
+## ========================
+## EXPERIMENT LOGGING
+## ========================
+
+MLFLOW_ENABLE_REMOTE = os.getenv("MLFLOW_REMOTE", "true").lower() == "true"
+MLFLOW_REMOTE_URL = "https://dagshub.com/mateovillaarias/traffic_prediction.mlflow"
+MLFLOW_LOCAL_URI = "http://127.0.0.1:8050/"
+MLFLOW_DEFAULT_EXPERIMENT_NAME = "Default"
+DAGSHUB_REPO_OWNER = "mateovillaarias"
+DAGSHUB_REPO_NAME = "traffic_prediction"
