@@ -39,7 +39,8 @@ logger = get_logger(__name__)
 ## Project paths
 ## ==================================================================
 ## Fix directly the project root
-PROJECT_ROOT: str = "/home/georges_nassopoulos/traffic_prediction-feature-dockerize"
+
+PROJECT_ROOT = os.getenv("APP_INPUTDIR")
 
 LIVE_DATA_PATH: Path = Path(
     "Services/DataCollection/data/live"

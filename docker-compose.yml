@@ -64,6 +64,7 @@ services:
       - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
       - AIRFLOW_CONN_FS_PROJECT=${AIRFLOW_CONN_FS_PROJECT}
       - PYTHONPATH=/workspace
+      - APP_INPUTDIR=${PWD}
     networks:
       - net
 
@@ -132,5 +133,7 @@ networks:
 volumes:
   airflow_db:
   airflow_logs:
+
+
 
     
