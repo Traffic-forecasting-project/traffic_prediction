@@ -41,23 +41,12 @@ logger = get_logger(__name__)
 ## Fix directly the project root
 
 PROJECT_ROOT = os.getenv("APP_INPUTDIR")
+DATA_PATH = os.path.join(PROJECT_ROOT,os.getenv("DATA_PATH")) 
 
-LIVE_DATA_PATH: Path = Path(
-    "Services/DataCollection/data/live"
-)
-# LIVE_DATA_PATH: Path = Path(
-    # f"{PROJECT_ROOT}/Services/DataCollection/data/live"
-# )
+LIVE_DATA_PATH: os.path.join(DATA_PATH,"live")
 
-LIVE_DATA_FILE: str = "Services/DataCollection/data/live/live_data_incident_analysis.17.csv"
-#LIVE_DATA_FILE: Path = LIVE_DATA_PATH / "live_data_*.csv" ## Generic alternative
+LIVE_DATA_FILE: str = os.path.join(LIVE_DATA_PATH,"live_data_incident_analysis.17.csv")
 
-#LIVE_DATA_FILE: Path = LIVE_DATA_PATH / "live_data_incident_analysis.17.csv"
-##LIVE_DATA_FILE: Path = LIVE_DATA_PATH / "live_data_*.csv" ## Generic alternative
-
-# MODEL_PATH: Path = Path(
-    # f"{PROJECT_ROOT}/model/model_incident_analysis_incident_duration_min.joblib"
-# )
 MODEL_PATH: str = "Services/model/model_incident_analysis_incident_duration_min.joblib"
 
 
@@ -136,7 +125,7 @@ if not SKIP_COLLECT_LIVE_DATA:
     		f"--arrondissement 17 --strategy incident_analysis "
     		f"--max-rows {MIN_LINE_INCREASE} "
     		f"--max-duration {MAX_DURATION} "
-    		"--arrondissements-path  /workspace/Services/DataCollection/data/arrondissements.csv"
+    		f"--arrondissements-path  {DATA_PATH}/data/arrondissements.csv"
 	),
         docker_url="unix://var/run/docker.sock",
         network_mode="bridge",
