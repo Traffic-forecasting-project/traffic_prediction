@@ -79,7 +79,8 @@ def get_skip_flag(name: str) -> bool:
     ).lower() in ["true", "1", "yes"]
 
 #SKIP_COLLECT_LIVE_DATA = True
-SKIP_COLLECT_LIVE_DATA: bool = True #get_skip_flag("SKIP_COLLECT_LIVE_DATA")
+SKIP_COLLECT_LIVE_DATA: bool = get_skip_flag("SKIP_COLLECT_LIVE_DATA")
+SKIP_SYNC_DATA: bool = get_skip_flag("SKIP_SYNC_DATA")
 SKIP_PREPROCESS_DATA: bool = get_skip_flag("SKIP_PREPROCESS_DATA")
 SKIP_EDA_ANALYSIS: bool = get_skip_flag("SKIP_EDA_ANALYSIS")
 SKIP_TRAIN_MODEL: bool = get_skip_flag("SKIP_TRAIN_MODEL")
@@ -87,6 +88,7 @@ SKIP_TRAIN_MODEL: bool = get_skip_flag("SKIP_TRAIN_MODEL")
 logger.info(
     "Task skipping options: COLLECT=%s, PREPROCESS=%s, EDA=%s, TRAIN=%s",
     SKIP_COLLECT_LIVE_DATA,
+    SKIP_SYNC_DATA,
     SKIP_PREPROCESS_DATA,
     SKIP_EDA_ANALYSIS,
     SKIP_TRAIN_MODEL,
@@ -159,7 +161,27 @@ else:
     logger.info("Skipping FileSensor for live data (RUN_MODE=manual)")
 
 ## ==================================================================
-## Task 2: Data Preparation (optional)
+## Task 1c: Data Collection : Synchronisation
+## ==================================================================
+if not SKIP_SYNC_DATA:
+    sync_data = ConditionalDockerOperator(
+        task_id="sync_data",
+        image="data_collector:latest",
+        command="python -u Services/DataCollection/src/sync_live_to_raw.py --delete-live",
+        docker_url="unix://var/run/docker.sock",
+        network_mode="bridge",
+        mounts=[Mount(source=PROJECT_ROOT, target="/workspace", type="bind")],
+        dag=dag,
+    )
+
+else:
+    sync_data = None
+    logger.info("Skipping task: sync_data")
+
+
+
+## ==================================================================
+## Task 2: Data Preparation : Feature extraction (optional)
 ## ==================================================================
 if not SKIP_PREPROCESS_DATA:
     preprocess_data = ConditionalDockerOperator(
@@ -204,8 +226,7 @@ if not SKIP_TRAIN_MODEL:
         docker_url="unix://var/run/docker.sock",
         network_mode="bridge",
         mounts=[Mount(source=PROJECT_ROOT, target="/workspace", type="bind")],
-        #required_path=str(LIVE_DATA_PATH),
-        required_path=f"/workspace/Services/DataCollection/data/live",
+        required_path=f"/workspace/data/processed",
         must_exist=True,
         must_have_lines=True,
         dag=dag,
@@ -251,6 +272,7 @@ previous_task: Optional[object] = None
 for task in [
     collect_live_data,
     wait_for_live_file,   ## only active in continuous mode
+    sync_data,
     preprocess_data,
     eda_analysis,
     train_model,

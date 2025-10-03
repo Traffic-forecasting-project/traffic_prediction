@@ -79,3 +79,16 @@ def update_raw_from_live(delete_live=False):
                 logger.info(f"Deleted live file: {live_path}")
             except Exception as e:
                 logger.warning(f"Failed to delete live file {live_path}: {e}")
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Update raw data folder from live data files.")
+    parser.add_argument(
+        "--delete-live",
+        action="store_true",
+        help="Delete live files after processing."
+    )
+    args = parser.parse_args()
+
+    update_raw_from_live(delete_live=args.delete_live)
