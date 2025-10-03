@@ -490,6 +490,7 @@ if __name__ == "__main__":
         data_dir_output = os.path.join("/workspace", data_dir_output)
 
     data_dir_output = data_dir_output.replace("/workspace/Services/","")
+    os.makedirs(data_dir_output, exist_ok= True)
     logger.info("=== Running prepare data pipeline (standalone mode) ===")
     logger.info(f"=== data_dir_input ==={args.input}")
     logger.info(f"=== data_dir_output ==={data_dir_output}")
