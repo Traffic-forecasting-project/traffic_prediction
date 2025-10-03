@@ -106,7 +106,7 @@ def save_csv(df_row, arrondissement, strategy):
 
     #TODO :
     ## Determine output file based on strategy
-    output_file = f"Services/DataCollection/data/live/live_data_{STRATEGY}.{arrondissement}.csv"
+    output_file = f"data/live/live_data_{STRATEGY}.{arrondissement}.csv"
 
     ## Write header only if file doesn't exist
     header = not os.path.exists(output_file)
