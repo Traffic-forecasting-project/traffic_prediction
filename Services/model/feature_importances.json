@@ -1,0 +1,52 @@
+{
+  "incident_analysis_jam_factor": [
+    "avg_speed",
+    "free_flow_speed",
+    "temp",
+    "hour",
+    "length",
+    "lon",
+    "lat",
+    "wind",
+    "icon_category",
+    "weekday",
+    "rain",
+    "tmc_tableVersion",
+    "tmc_tableNumber",
+    "incident_count"
+  ],
+  "incident_analysis_incident_duration_min": [
+    "length",
+    "lon",
+    "temp",
+    "free_flow_speed",
+    "lat",
+    "jam_factor",
+    "hour",
+    "avg_speed",
+    "wind",
+    "weekday",
+    "rain",
+    "icon_category",
+    "tmc_tableVersion",
+    "tmc_tableNumber",
+    "incident_count"
+  ],
+  "incident_analysis_mean_magnitude": [
+    "icon_category",
+    "length",
+    "lat",
+    "lon",
+    "temp",
+    "free_flow_speed",
+    "jam_factor",
+    "hour",
+    "avg_speed",
+    "wind",
+    "weekday",
+    "rain",
+    "tmc_tableVersion",
+    "tmc_tableNumber",
+    "incident_count"
+  ]
+}

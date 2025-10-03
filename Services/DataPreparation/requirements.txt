@@ -1,0 +1,8 @@
+dvc[s3,azure,gs,gdrive,ssh,webdav]>=3.0.0
+pandas>=2.0.0
+requests>=2.31.0
+python-dotenv>=1.0.0
+tqdm>=4.66.0
+scikit-learn==1.6.1
+matplotlib==3.8.0
+seaborn==0.12.2
