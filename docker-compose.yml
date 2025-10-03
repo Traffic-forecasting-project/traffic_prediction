@@ -1,0 +1,139 @@
+version: "3.9"
+
+services:
+  airflow-init:
+    build: ./Services/Airflow
+    # command: bash -c "airflow db init"
+    command: bash -c "airflow db init && \
+                  airflow users create --username admin \
+                                        --firstname Admin \
+                                        --lastname User \
+                                        --role Admin \
+                                        --email admin@example.com \
+                                        --password admin"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - airflow_db:/opt/airflow      
+      - airflow_logs:/opt/airflow/logs
+    env_file:
+      - .env
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
+      - AIRFLOW_CONN_FS_PROJECT=${AIRFLOW_CONN_FS_PROJECT}
+      - PYTHONPATH=/workspace
+    networks:
+      - net
+    restart: "no"
+
+  airflow-webserver:
+    build: ./Services/Airflow
+    command: webserver
+    user: "0:0"
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./:/workspace 
+      - ./dags:/opt/airflow/dags
+      - airflow_db:/opt/airflow
+      - airflow_logs:/opt/airflow/logs
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
+      - AIRFLOW_CONN_FS_PROJECT=${AIRFLOW_CONN_FS_PROJECT}
+      - PYTHONPATH=/workspace
+    networks:
+      - net
+
+  airflow-scheduler:
+    build: ./Services/Airflow
+    command: scheduler
+    user: "0:0"
+    env_file:
+      - .env
+    depends_on:
+      - airflow-webserver
+    volumes:
+      - ./:/workspace 
+      - ./dags:/opt/airflow/dags
+      - airflow_db:/opt/airflow
+      - airflow_logs:/opt/airflow/logs
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
+      - AIRFLOW_CONN_FS_PROJECT=${AIRFLOW_CONN_FS_PROJECT}
+      - PYTHONPATH=/workspace
+      - APP_INPUTDIR=${PWD}
+    networks:
+      - net
+
+  fast_api:
+    build: ./Services/FastAPI
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./model:/app/model:rw
+      - ./logs:/app/logs
+    networks:
+      - net
+    restart: unless-stopped
+
+  data_collector:
+    build: ./Services/DataCollection
+    image: data_collector:latest
+    volumes:
+      - ./Services/DataCollection/src:/workspace/Services/DataCollection/src
+      - ./Services/DataCollection/data:/workspace/Services/DataCollection/data
+      - ./Services/DataCollection/data:/workspace/Services/data
+      - ./Services/utils:/workspace/Services/utils
+      - ./Services/FastAPI:/workspace/Services/FastAPI
+    environment:
+      - PYTHONPATH=/workspace:/workspace/Services/DataCollection/src:/workspace/Services/utils:/workspace/Services/FastAPI
+    networks:
+      - net
+    tty: true
+    stdin_open: true
+
+  data_preparation:
+    build: ./Services/DataPreparation
+    image: data_preparation:latest
+    volumes:
+      - ./Services/DataPreparation/src:/workspace/Services/DataPreparation/src
+      - ./Services/DataCollection/data:/workspace/Services/DataCollection/data
+      - ./Services/utils:/workspace/Services/utils
+      - ./Services/FastAPI:/workspace/Services/FastAPI
+    environment:
+      - PYTHONPATH=/workspace:/workspace/Services/DataPreparation/src:/workspace/Services/utils:/workspace/Services/FastAPI
+    networks:
+      - net
+    tty: true
+    stdin_open: true
+
+  model_training:
+    build: ./Services/ModelTraining
+    image: model_training:latest
+    volumes:
+      - ./Services/ModelTraining/src:/workspace/Services/ModelTraining/src
+      - ./Services/DataPreparation/data:/workspace/Services/DataPreparation/data
+      - ./Services/DataCollection/data:/workspace/Services/DataCollection/data
+      - ./Services/model:/workspace/Services/model
+      - ./Services/utils:/workspace/Services/utils
+      - ./Services/FastAPI:/workspace/Services/FastAPI
+    environment:
+      - PYTHONPATH=/workspace:/workspace/Services/ModelTraining/src:/workspace/Services/utils:/workspace/Services/FastAPI
+    networks: [net]
+    tty: true
+    stdin_open: true
+
+
+networks:
+  net:
+
+volumes:
+  airflow_db:
+  airflow_logs:
+
+
+
+    
