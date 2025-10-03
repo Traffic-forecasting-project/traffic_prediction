@@ -41,11 +41,11 @@ logger = get_logger(__name__)
 ## Fix directly the project root
 
 PROJECT_ROOT = os.getenv("APP_INPUTDIR")
-DATA_PATH = os.path.join(PROJECT_ROOT,os.getenv("DATA_PATH")) 
+DATA_PATH = os.path.join("/workspace",os.getenv("DATA_PATH")) 
 
-LIVE_DATA_PATH: os.path.join(DATA_PATH,"live")
+LIVE_DATA_PATH= os.path.join(DATA_PATH,"live")
 
-LIVE_DATA_FILE: str = os.path.join(LIVE_DATA_PATH,"live_data_incident_analysis.17.csv")
+LIVE_DATA_FILE: str = os.path.join(LIVE_DATA_PATH,"live_data_incident_analysis.1.csv")
 
 MODEL_PATH: str = "Services/model/model_incident_analysis_incident_duration_min.joblib"
 
@@ -79,7 +79,7 @@ def get_skip_flag(name: str) -> bool:
     ).lower() in ["true", "1", "yes"]
 
 #SKIP_COLLECT_LIVE_DATA = True
-SKIP_COLLECT_LIVE_DATA: bool = get_skip_flag("SKIP_COLLECT_LIVE_DATA")
+SKIP_COLLECT_LIVE_DATA: bool = True #get_skip_flag("SKIP_COLLECT_LIVE_DATA")
 SKIP_PREPROCESS_DATA: bool = get_skip_flag("SKIP_PREPROCESS_DATA")
 SKIP_EDA_ANALYSIS: bool = get_skip_flag("SKIP_EDA_ANALYSIS")
 SKIP_TRAIN_MODEL: bool = get_skip_flag("SKIP_TRAIN_MODEL")
@@ -122,10 +122,10 @@ if not SKIP_COLLECT_LIVE_DATA:
         image="data_collector:latest",
 	command = (
     		"python /workspace/Services/DataCollection/src/live_data_collector.py "
-    		f"--arrondissement 17 --strategy incident_analysis "
+    		f"--arrondissement 1 --strategy incident_analysis "
     		f"--max-rows {MIN_LINE_INCREASE} "
     		f"--max-duration {MAX_DURATION} "
-    		f"--arrondissements-path  {DATA_PATH}/data/arrondissements.csv"
+    		f"--arrondissements-path  {DATA_PATH}/arrondissements.csv"
 	),
         docker_url="unix://var/run/docker.sock",
         network_mode="bridge",
