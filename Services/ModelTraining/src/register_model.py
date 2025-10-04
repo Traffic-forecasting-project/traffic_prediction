@@ -409,7 +409,7 @@ if __name__ == "__main__":
     parser.add_argument("--tags", type=str, default=None,
                         help='Comma-separated tags, e.g. "stage=staging,owner=georges".')
     parser.add_argument("--filepath", type=str,
-                        default="/workspace/Services/model/model_incident_analysis_incident_duration_min.joblib",
+                        default="/workspace/model/model_incident_analysis_incident_duration_min.joblib",
                         help=("Artifact-relative path inside the run (file or directory). "
                               "Ignored if interactive selection is used and no path is provided."))
     parser.add_argument("--interactive", action="store_true",

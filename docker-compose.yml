@@ -65,6 +65,7 @@ services:
       - AIRFLOW_CONN_FS_PROJECT=${AIRFLOW_CONN_FS_PROJECT}
       - PYTHONPATH=/workspace
       - APP_INPUTDIR=${PWD}
+      - DATA_PATH=data
     networks:
       - net
 

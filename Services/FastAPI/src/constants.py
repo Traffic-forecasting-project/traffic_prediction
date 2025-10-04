@@ -26,13 +26,13 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 ## BASE DIRECTORIES
 ## ========================
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
-DATA_DIR = os.path.join(BASE_DIR, "data")
-MODELS_DIR = os.path.join(BASE_DIR, "model")
-EDA_OUTPUT_DIR = os.path.join(BASE_DIR, "eda")
+DATA_DIR = "data"
+MODELS_DIR = "model"
+EDA_OUTPUT_DIR = "eda"
 RAW_DATA_DIR = os.path.join(DATA_DIR, "raw")
 LIVE_DATA_DIR = os.path.join(DATA_DIR, "live")
 PROCESSED_DATA_DIR = os.path.join(DATA_DIR, "processed")
-RESOURCES_DIR = os.path.join(BASE_DIR, "resources")
+RESOURCES_DIR = "ressources"
 
 ## ========================
 ## AUTHORIZATION DUMMY USERS

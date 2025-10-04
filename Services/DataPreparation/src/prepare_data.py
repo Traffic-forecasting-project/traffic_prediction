@@ -396,7 +396,7 @@ def create_features(df: pd.DataFrame, data_dir_output: str, strategy: str, targe
         df = df[df[target_column] < threshold]
         logger.info(f"\t Filtered extreme values for {target_column} < 95th percentile ({threshold:.2f}). Rows: {original_len} -> {len(df)}")
 
-    feature_path = os.path.join(os.getcwd(), f"Services/{data_dir_output}/df_features_{strategy}_{target_column}.csv")
+    feature_path = os.path.join(os.getcwd(), f"{data_dir_output}/df_features_{strategy}_{target_column}.csv")
 
     return (df, feature_path)
 
@@ -422,8 +422,7 @@ def run_prepare_data_pipeline(strategy: str | None = None,
     """
     # Resolve env-based defaults
     strategy = strategy or os.getenv("DATAPREP_DEFAULT_STRATEGY", "incident_analysis")
-    data_dir_input = data_dir_input or os.getenv("DATAPREP_DEFAULT_INPUT_DIR", "Services/DataCollection/data/raw")
-    data_dir_output = data_dir_output or os.getenv("DATAPREP_DEFAULT_OUTPUT_DIR", "Services/DataPreparation/data/processed")
+
 
     os.makedirs(data_dir_output, exist_ok=True)
 
@@ -478,18 +477,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run prepare_data pipeline")
     parser.add_argument("--strategy", "-s",  default="incident_analysis", help="Strategy")
     parser.add_argument("--targets", nargs="*", default=None, help="Optional list of targets")
-    parser.add_argument("--input", default="Services/DataCollection/data/live", help="Input data dir")
-    parser.add_argument("--output", default="Services/DataPreparation/data/processed", help="Output data dir")
+    parser.add_argument("--input", default="data/raw", help="Input data dir")
+    parser.add_argument("--output", default="data/processed", help="Output data dir")
     args = parser.parse_args()
 
     args = parser.parse_args()
     
     ## Set absolute to relative path
     data_dir_output = args.output
-    if not os.path.isabs(data_dir_output):
-        data_dir_output = os.path.join("/workspace", data_dir_output)
 
-    data_dir_output = data_dir_output.replace("/workspace/Services/","")
     os.makedirs(data_dir_output, exist_ok= True)
     logger.info("=== Running prepare data pipeline (standalone mode) ===")
     logger.info(f"=== data_dir_input ==={args.input}")

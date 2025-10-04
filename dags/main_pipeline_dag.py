@@ -41,23 +41,12 @@ logger = get_logger(__name__)
 ## Fix directly the project root
 
 PROJECT_ROOT = os.getenv("APP_INPUTDIR")
+DATA_PATH = os.path.join("/workspace",os.getenv("DATA_PATH")) 
 
-LIVE_DATA_PATH: Path = Path(
-    "Services/DataCollection/data/live"
-)
-# LIVE_DATA_PATH: Path = Path(
-    # f"{PROJECT_ROOT}/Services/DataCollection/data/live"
-# )
+LIVE_DATA_PATH= os.path.join(DATA_PATH,"live")
 
-LIVE_DATA_FILE: str = "Services/DataCollection/data/live/live_data_incident_analysis.17.csv"
-#LIVE_DATA_FILE: Path = LIVE_DATA_PATH / "live_data_*.csv" ## Generic alternative
+LIVE_DATA_FILE: str = os.path.join(LIVE_DATA_PATH,"live_data_incident_analysis.1.csv")
 
-#LIVE_DATA_FILE: Path = LIVE_DATA_PATH / "live_data_incident_analysis.17.csv"
-##LIVE_DATA_FILE: Path = LIVE_DATA_PATH / "live_data_*.csv" ## Generic alternative
-
-# MODEL_PATH: Path = Path(
-    # f"{PROJECT_ROOT}/model/model_incident_analysis_incident_duration_min.joblib"
-# )
 MODEL_PATH: str = "Services/model/model_incident_analysis_incident_duration_min.joblib"
 
 
@@ -91,6 +80,7 @@ def get_skip_flag(name: str) -> bool:
 
 #SKIP_COLLECT_LIVE_DATA = True
 SKIP_COLLECT_LIVE_DATA: bool = get_skip_flag("SKIP_COLLECT_LIVE_DATA")
+SKIP_SYNC_DATA: bool = get_skip_flag("SKIP_SYNC_DATA")
 SKIP_PREPROCESS_DATA: bool = get_skip_flag("SKIP_PREPROCESS_DATA")
 SKIP_EDA_ANALYSIS: bool = get_skip_flag("SKIP_EDA_ANALYSIS")
 SKIP_TRAIN_MODEL: bool = get_skip_flag("SKIP_TRAIN_MODEL")
@@ -98,6 +88,7 @@ SKIP_TRAIN_MODEL: bool = get_skip_flag("SKIP_TRAIN_MODEL")
 logger.info(
     "Task skipping options: COLLECT=%s, PREPROCESS=%s, EDA=%s, TRAIN=%s",
     SKIP_COLLECT_LIVE_DATA,
+    SKIP_SYNC_DATA,
     SKIP_PREPROCESS_DATA,
     SKIP_EDA_ANALYSIS,
     SKIP_TRAIN_MODEL,
@@ -133,10 +124,10 @@ if not SKIP_COLLECT_LIVE_DATA:
         image="data_collector:latest",
 	command = (
     		"python /workspace/Services/DataCollection/src/live_data_collector.py "
-    		f"--arrondissement 17 --strategy incident_analysis "
+    		f"--arrondissement 1 --strategy incident_analysis "
     		f"--max-rows {MIN_LINE_INCREASE} "
     		f"--max-duration {MAX_DURATION} "
-    		"--arrondissements-path  /workspace/Services/DataCollection/data/arrondissements.csv"
+    		f"--arrondissements-path  {DATA_PATH}/arrondissements.csv"
 	),
         docker_url="unix://var/run/docker.sock",
         network_mode="bridge",
@@ -170,7 +161,27 @@ else:
     logger.info("Skipping FileSensor for live data (RUN_MODE=manual)")
 
 ## ==================================================================
-## Task 2: Data Preparation (optional)
+## Task 1c: Data Collection : Synchronisation
+## ==================================================================
+if not SKIP_SYNC_DATA:
+    sync_data = ConditionalDockerOperator(
+        task_id="sync_data",
+        image="data_collector:latest",
+        command="python -u Services/DataCollection/src/sync_live_to_raw.py --delete-live",
+        docker_url="unix://var/run/docker.sock",
+        network_mode="bridge",
+        mounts=[Mount(source=PROJECT_ROOT, target="/workspace", type="bind")],
+        dag=dag,
+    )
+
+else:
+    sync_data = None
+    logger.info("Skipping task: sync_data")
+
+
+
+## ==================================================================
+## Task 2: Data Preparation : Feature extraction (optional)
 ## ==================================================================
 if not SKIP_PREPROCESS_DATA:
     preprocess_data = ConditionalDockerOperator(
@@ -215,8 +226,7 @@ if not SKIP_TRAIN_MODEL:
         docker_url="unix://var/run/docker.sock",
         network_mode="bridge",
         mounts=[Mount(source=PROJECT_ROOT, target="/workspace", type="bind")],
-        #required_path=str(LIVE_DATA_PATH),
-        required_path=f"/workspace/Services/DataCollection/data/live",
+        required_path=f"/workspace/data/processed",
         must_exist=True,
         must_have_lines=True,
         dag=dag,
@@ -262,6 +272,7 @@ previous_task: Optional[object] = None
 for task in [
     collect_live_data,
     wait_for_live_file,   ## only active in continuous mode
+    sync_data,
     preprocess_data,
     eda_analysis,
     train_model,

@@ -281,7 +281,7 @@ if __name__ == "__main__":
                         help="Strategy to run: 'traffic_analysis' or 'incident_analysis'")
     parser.add_argument("--regenerate", action="store_true",
                         help="Regenerate features before training")
-    parser.add_argument("--input", type=str, default="Services/DataPreparation/data",
+    parser.add_argument("--input", type=str, default="data",
                         help="Path to input data directory")
     parser.add_argument("--stats", type=str, default="metrics",
                         help="Path to stats output directory")
