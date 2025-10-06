@@ -1,6 +1,12 @@
-## ============================
-## Imports
-## ============================
+'''
+__author__ = "Georges Nassopoulos"
+__copyright__ = None
+__version__ = "1.0.0"
+__email__ = "georges.nassopoulos@gmail.com"
+__status__ = "Dev"
+__desc__ = "FastAPI service exposing prediction endpoints for incident_duration_min with JWT authentication."
+'''
+
 import uvicorn
 import joblib
 import pandas as pd
@@ -14,23 +20,46 @@ import os
 import json
 from pathlib import Path
 
-## Authentication and authorization
-from src.auth.jwt_auth import create_access_token
-from src.auth.dependencies import RoleChecker
-from src.auth.roles import ROLE_ADMIN, ROLE_USER
+## Imports for "microservice" et "legacy" structures respectively
+try:
+ 
+    ## Authentication and authorization
+    from Services.FastAPI.src.auth.jwt_auth import create_access_token
+    from Services.FastAPI.src.auth.dependencies import RoleChecker
+    from Services.FastAPI.src.auth.roles import ROLE_ADMIN, ROLE_USER
 
-## Import dynamic schema
-from src.core.dynamic_schema import DynamicFeatures, load_feature_order
+    ## Import dynamic schema
+    from Services.FastAPI.src.dynamic_schema import DynamicFeatures, load_feature_order
 
-## Logging utilities
-from src.core.logging_utils import get_logger, log_execution_time_and_path
+    ## Logging utilities
+    from Services.FastAPI.src.logging_utils import get_logger, log_execution_time_and_path
 
-## Project constants
-from src.core.constants import (
-    MODEL_PATH,
-    ACCESS_TOKEN_EXPIRE_MINUTES,
-    FAKE_USERS_DB
-)
+    ## Project constants
+    from Services.FastAPI.src.constants import (
+        MODEL_PATH,
+        ACCESS_TOKEN_EXPIRE_MINUTES,
+        FAKE_USERS_DB
+    )
+
+except:
+
+    ## Authentication and authorization
+    from src.auth.jwt_auth import create_access_token
+    from src.auth.dependencies import RoleChecker
+    from src.auth.roles import ROLE_ADMIN, ROLE_USER
+
+    ## Import dynamic schema
+    from src.core.dynamic_schema import DynamicFeatures, load_feature_order
+
+    ## Logging utilities
+    from src.core.logging_utils import get_logger, log_execution_time_and_path
+
+    ## Project constants
+    from src.core.constants import (
+        MODEL_PATH,
+        ACCESS_TOKEN_EXPIRE_MINUTES,
+        FAKE_USERS_DB
+    )
 
 ## ============================
 ## Setup logger
@@ -43,6 +72,9 @@ logger = get_logger(__name__)
 model = None         # Holds the trained ML model
 FEATURE_ORDER = []   # Stores expected feature order
 FEATURE_FILE = Path("resources/feature_importances.json")  # Fallback file for features
+
+## MODEL_PATH is now safe and works everywhere
+MODEL_PATH = MODEL_PATH.replace("Services\\", "")
 
 ## ============================
 ## FastAPI app initialization
@@ -332,19 +364,32 @@ async def get_metrics(current_user=Depends(RoleChecker([ROLE_ADMIN]))):
 ## ============================
 ## Run pipeline function
 ## ============================
-def run_fastapi_service_pipeline(reload: bool = False) -> None:
+def run_fastapi_service_pipeline(
+    reload: bool = False,
+    model_dir: str = os.path.join(".", "model"),
+    model_filename: str = "model_incident_analysis_incident_duration_min.joblib"
+) -> None:
     """
-        Load model, prepare feature order (and persist), and launch FastAPI app
+        Load model, prepare feature order, and launch FastAPI app
 
         Args:
             reload (bool): If True, runs uvicorn in reload mode for development
+            model_dir (str): Directory containing the trained model. Defaults to "./model"
+            model_filename (str): Model filename to load. Defaults to the incident_analysis model
     """
-    
+
     global model, FEATURE_ORDER
 
-    ## Load model (required to start in serving mode)
-    logger.info(f"Loading model from {MODEL_PATH}")
-    model = joblib.load(MODEL_PATH)
+    ## Build full model path dynamically
+    model_path = os.path.join(model_dir, model_filename)
+    logger.info(f"Loading model from {os.path.abspath(model_path)}")
+
+    ## Load the model file
+    if not os.path.exists(model_path):
+        logger.error(f"Model file not found: {model_path}")
+        raise FileNotFoundError(f"Model file not found at {model_path}")
+
+    model = joblib.load(model_path)
 
     ## Load features from model or JSON fallback
     try:
@@ -365,10 +410,17 @@ def run_fastapi_service_pipeline(reload: bool = False) -> None:
         logger.error(f"Failed to initialize feature order: {e}")
         raise SystemExit(1)
 
-    ## Start server
+    ## Start the FastAPI server
     if reload:
-        ## Referencing by module path lets uvicorn auto-reload properly
-        uvicorn.run("src.core.service:app", host="0.0.0.0", port=8000, reload=True)
+        ## Exclude the problematic 'logs' directory to avoid OSError on Windows
+        exclude_dirs = ["logs", "venv", "test_win"]
+        uvicorn.run(
+            "src.core.service:app",
+            host="0.0.0.0",
+            port=8000,
+            reload=True,
+            reload_excludes=exclude_dirs,  ## prevent watching log folders
+        )
     else:
         uvicorn.run(app, host="0.0.0.0", port=8000)
 
@@ -376,5 +428,15 @@ def run_fastapi_service_pipeline(reload: bool = False) -> None:
 ## Local execution for debugging
 ## ============================
 if __name__ == "__main__":
-    ## When running this file directly, enable code reload for dev convenience
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+    """
+        Allow direct execution with autoreload for development.
+    """
+    exclude_dirs = ["logs", "venv", "test_win"]
+
+    uvicorn.run(
+        "src.core.service:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        reload_excludes=exclude_dirs,  ## ignore logs to avoid WinError
+    )

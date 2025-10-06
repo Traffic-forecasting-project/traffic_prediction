@@ -9,8 +9,13 @@ __desc__ = Utility functions for live data collection
 
 import logging
 
-from src.core.constants import WEATHER_KEY, TOMTOM_KEY, SAMPLE_ALL_INCIDENT_POINTS
-from src.utils.utils import convert_to_local_timezone, safe_request
+## Import constants and logger based on project structure
+try:
+    from Services.FastAPI.src.constants import WEATHER_KEY, TOMTOM_KEY, SAMPLE_ALL_INCIDENT_POINTS
+    from Services.utils.utils import convert_to_local_timezone, safe_request
+except:        
+    from src.core.constants import WEATHER_KEY, TOMTOM_KEY, SAMPLE_ALL_INCIDENT_POINTS
+    from src.utils.utils import convert_to_local_timezone, safe_request
 
 ## ========================
 ## API Call utilities

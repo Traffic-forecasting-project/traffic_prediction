@@ -21,14 +21,9 @@ from unittest.mock import patch, MagicMock
 from src.core.service import app
 
 ## Define model and fallback JSON paths
-MODEL_PATH = os.path.join(
-    os.path.dirname(__file__),
-    "..", "model", "model_incident_analysis_incident_duration_min.joblib"
-)
-JSON_FALLBACK_PATH = os.path.join(
-    os.path.dirname(__file__),
-    "..", "resources", "feature_importances.json"
-)
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+MODEL_PATH = os.path.join(BASE_DIR, "model", "model_incident_analysis_incident_duration_min.joblib")
+JSON_FALLBACK_PATH = os.path.join(BASE_DIR, "resources", "feature_importances.json")
 
 def build_dynamic_payload():
     """

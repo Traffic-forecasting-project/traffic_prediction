@@ -8,38 +8,75 @@ __status__ = "Dev"
 __desc__ = "Live data collection script for traffic or incident analysis"
 '''
 
+import argparse
 import datetime
 import time
 import random
 import logging
 import pandas as pd
 import os
-from dotenv import load_dotenv
-load_dotenv()
+import sys
+from dotenv import load_dotenv, find_dotenv
 
-from src.utils.utils import save_csv
-from src.utils.utils_api_calls import (
-    get_weather,
-    get_traffic_flow,
-    get_incidents
-)
-from src.utils.utils_coordinates import (
-    extract_point_list_from_geometry,
-    get_bbox_from_coords,
-    split_bbox
-)
-from src.core.constants import (
-    DELTA_BBOX,
-    ARRONDISSEMENTS_PATH,
-    CSV_PATH,
-    MULTIPLE_WEATHER_CALLS,
-    WEATHER_REFRESH_DELAY,
-    MAX_CALLS_PER_DAY,
-    CALL_DELAY_SECONDS,
-    NB_POINTS_TO_COLLECT,
-    BBOX_SPLIT_COUNT,
-)
+## check if loading the .env file works
+load_dotenv(find_dotenv())
 
+## check if loading the .env file works
+if not os.getenv("PYTHONPATH"):
+    print("PYTHONPATH not set")
+else:
+    print(f"PYTHONPATH is set to: {os.getenv('PYTHONPATH')}")
+    
+## Imports for "microservice" et "legacy" structures respectively
+try:
+            
+    from Services.utils.utils import save_csv
+    from Services.utils.utils_api_calls import (
+        get_weather,
+        get_traffic_flow,
+        get_incidents
+    )
+    from Services.utils.utils_coordinates import (
+        extract_point_list_from_geometry,
+        get_bbox_from_coords,
+        split_bbox
+    )
+    from Services.FastAPI.src.constants import (
+        DELTA_BBOX,
+        ARRONDISSEMENTS_PATH,
+        CSV_PATH,
+        MULTIPLE_WEATHER_CALLS,
+        WEATHER_REFRESH_DELAY,
+        MAX_CALLS_PER_DAY,
+        CALL_DELAY_SECONDS,
+        NB_POINTS_TO_COLLECT,
+        BBOX_SPLIT_COUNT,
+    )
+
+except:
+    from src.utils.utils import save_csv
+    from src.utils.utils_api_calls import (
+        get_weather,
+        get_traffic_flow,
+        get_incidents
+    )
+    from src.utils.utils_coordinates import (
+        extract_point_list_from_geometry,
+        get_bbox_from_coords,
+        split_bbox
+    )
+    from src.core.constants import (
+        DELTA_BBOX,
+        ARRONDISSEMENTS_PATH,
+        CSV_PATH,
+        MULTIPLE_WEATHER_CALLS,
+        WEATHER_REFRESH_DELAY,
+        MAX_CALLS_PER_DAY,
+        CALL_DELAY_SECONDS,
+        NB_POINTS_TO_COLLECT,
+        BBOX_SPLIT_COUNT,
+    )
+    
 calls_today = 0  ## Counter for total API calls (weather)
 last_weather_time = None  ## Last time weather was fetched
 last_weather_data = None  ## Cached result if shared
@@ -256,22 +293,37 @@ def collect_from_bbox(
     ## Filter out missing columns to avoid errors
     columns_order = [col for col in columns_order if col in df.columns]
     return df[columns_order]
-
-def run_live_data_pipeline(arrondissement: int, strategy: str) -> None:
+    
+def run_live_data_pipeline(
+    arrondissement: int | None = 17,
+    arrondissement_path: str | None = os.path.join("data", "arrondissements.csv"),
+    strategy: str | None = "incident_analysis",
+    max_rows: int | None = int(os.getenv("DATACOLLECTION_MAX_ROWS", 10000)),
+    max_duration: int | None = int(os.getenv("DATACOLLECTION_MAX_DURATION", 60))
+) -> None:
     """
-        Run the live data collection loop using the specified strategy
+        Run the live data collection loop using the specified strategy.
+        If parameters are None, fall back to environment variables.
 
-        Args:
-            arrondissement (int): Paris arrondissement number
-            strategy (str): 'traffic_analysis' or 'incident_analysis'
+        Env overrides:
+            DATACOLLECTION_DEFAULT_ARRONDISSEMENT
+            DATACOLLECTION_DEFAULT_STRATEGY
+            DATACOLLECTION_MAX_ROWS
+            DATACOLLECTION_MAX_DURATION
     """
-
+    
     global tomtom_key, weather_key, calls_today
+
+    arrondissement = arrondissement or int(os.getenv("DATACOLLECTION_DEFAULT_ARRONDISSEMENT", 17))
+    strategy = strategy or os.getenv("DATACOLLECTION_DEFAULT_STRATEGY", "incident_analysis")
+    max_rows = max_rows or int(os.getenv("DATACOLLECTION_MAX_ROWS", "10000"))
+    max_duration = max_duration or int(os.getenv("DATACOLLECTION_MAX_DURATION", "60"))
+
     ## Load API keys from .env or config
     tomtom_key, weather_key = load_api_keys(arrondissement)
 
     ## Load the polygon geometry of the selected arrondissement
-    df_arr = pd.read_csv(ARRONDISSEMENTS_PATH)
+    df_arr = pd.read_csv(arrondissement_path)
     geometry = df_arr.iloc[arrondissement - 1]["Geometry"]
 
     ## Convert geometry string into a list of coordinate points
@@ -282,11 +334,18 @@ def run_live_data_pipeline(arrondissement: int, strategy: str) -> None:
 
     ## Initialize tracking variables
     success_count = 0
-    max_rows = 10000  ## Max number of rows to collect
     calls_today = 0   ## Tracks API calls made today (should be centralized globally)
+
+    ## Track start time
+    start_time = time.time()
 
     ## Main data collection loop
     while success_count < max_rows and calls_today + 3 <= MAX_CALLS_PER_DAY:
+    
+        ## Stop if timeout exceeded
+        if time.time() - start_time >= max_duration:
+            logging.info(f"Timeout reached after {max_duration}s, stopping gracefully.")
+            break
 
         ## Strategy 1: Random sampling inside polygon
         if strategy == "traffic_analysis":
@@ -354,3 +413,55 @@ def load_api_keys(arrondissement: int) -> tuple:
     tomtom_key = os.getenv(f"TOMTOM_KEY_{arrondissement}")
     weather_key = os.getenv(f"WEATHER_KEY_{arrondissement}")
     return tomtom_key, weather_key
+
+def parse_arguments() -> argparse.Namespace:
+    """
+        Parse CLI arguments
+    """
+    
+    parser = argparse.ArgumentParser(description="Live Data Collector CLI")
+    parser.add_argument("-a", "--arrondissement", type=int, default=17,
+                        help="Paris arrondissement (1–20)")
+    parser.add_argument("-s", "--strategy", type=str, default="incident_analysis",
+                        choices=["incident_analysis", "traffic_analysis"],
+                        help="Data collection strategy")
+    parser.add_argument("-r", "--max-rows", type=int,
+                        default=int(os.getenv("DATACOLLECTION_MAX_ROWS", 10000)),
+                        help="Maximum number of rows to collect")
+    parser.add_argument("-t", "--max-duration", type=int,
+                        default=int(os.getenv("DATACOLLECTION_MAX_DURATION", 60)),
+                        help="Timeout in seconds before stopping the loop")
+
+    parser.add_argument("--arrondissements-path", type=str,
+                        default=ARRONDISSEMENTS_PATH,
+                        help="Path to the arrondissements CSV file")
+                          
+    return parser.parse_args()
+
+if __name__ == "__main__":
+    args = parse_arguments()
+
+    VALID_STRATEGIES = ["traffic_analysis", "incident_analysis"]
+    VALID_ARRONDISSEMENTS = list(range(1, 21))
+
+    if args.arrondissement not in VALID_ARRONDISSEMENTS:
+        logging.error(f"Invalid arrondissement '{args.arrondissement}'. Must be between 1 and 20.")
+        sys.exit(1)
+
+    if args.strategy not in VALID_STRATEGIES:
+        logging.error(f"Invalid strategy '{args.strategy}'. Choose from {VALID_STRATEGIES}.")
+        sys.exit(1)
+
+    print("Starting live data collection...")
+    logging.info(
+        f"Starting live data collection for arrondissement {args.arrondissement} "
+        f"using strategy '{args.strategy}'"
+    )
+
+    run_live_data_pipeline(
+        arrondissement=args.arrondissement,
+        arrondissement_path=args.arrondissements_path,       
+        strategy=args.strategy,
+        max_rows=args.max_rows,
+        max_duration=args.max_duration
+    )

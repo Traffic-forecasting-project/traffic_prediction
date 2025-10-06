@@ -1,5 +1,5 @@
 ''' 
-__author__ = -
+__author__ = "Georges Nassopoulos"
 __copyright__ = None
 __version__ = "1.6.3"
 __email__ = "georges.nassopoulos@gmail.com"
@@ -7,22 +7,37 @@ __status__ = "Dev"
 __desc__ = "Data preparation module: feature engineering and target construction for traffic prediction."
 '''
 
+import os
 import pandas as pd
 import numpy as np
 from sklearn.impute import SimpleImputer
-from src.core.logging_utils import get_logger, log_execution_time_and_path
 
-from src.core.constants import (
-    FILTER_STANDARD_INCIDENTS,
-    TARGET_METADATA,
-    ENABLE_EXTRA_FEATURES
-)
+## Imports for "microservice" et "legacy" structures respectively
+try:
+    from Services.FastAPI.src.logging_utils import get_logger, log_execution_time_and_path            
+    from Services.FastAPI.src.constants import (
+        FILTER_STANDARD_INCIDENTS,
+        TARGET_METADATA,
+        ENABLE_EXTRA_FEATURES
+    )
+    from Services.utils.utils import (
+        safe_eval,
+        clean_columns_and_rows,
+        load_and_merge_files
+    )
 
-from src.utils.utils import (
-    safe_eval,
-    clean_columns_and_rows,
-    load_and_merge_files
-)
+except:
+    from src.core.logging_utils import get_logger, log_execution_time_and_path            
+    from src.core.constants import (
+        FILTER_STANDARD_INCIDENTS,
+        TARGET_METADATA,
+        ENABLE_EXTRA_FEATURES
+    )
+    from src.utils.utils import (
+        safe_eval,
+        clean_columns_and_rows,
+        load_and_merge_files
+    )
 
 logger = get_logger("prepare_data")
 
@@ -82,19 +97,18 @@ def advanced_create_features(df: pd.DataFrame, selected_features: list = None) -
         Generate advanced features to improve prediction
         Only used when enable_extra_features is True
 
-        Parameters:
-        -----------
-        df : pd.DataFrame
-            DataFrame containing raw or partially processed input features
-        selected_features : list
-            List of feature names to generate. Valid options include:
-            ['delay_before_start', 'time_until_end', 'minutes_since_last_report',
-             'weekday_flags', 'hour_x_jam', 'time_period']
+        Args:
+            df : pd.DataFrame
+                DataFrame containing raw or partially processed input features
+            selected_features : list
+                List of feature names to generate. Valid options include:
+                ['delay_before_start', 'time_until_end', 'minutes_since_last_report',
+                 'weekday_flags', 'hour_x_jam', 'time_period']
 
         Returns:
-        --------
-        pd.DataFrame
-            DataFrame with new engineered features
+
+            pd.DataFrame
+                DataFrame with new engineered features
     """
 
     if selected_features is None:
@@ -294,7 +308,7 @@ def advanced_create_features(df: pd.DataFrame, selected_features: list = None) -
 
     return df
     
-@log_execution_time_and_path
+#@log_execution_time_and_path
 def create_features(df: pd.DataFrame, data_dir_output: str, strategy: str, target_column: str = "incident_duration_min") -> pd.DataFrame:
     """
         Create additional features from the input DataFrame based on the selected strategy
@@ -396,45 +410,111 @@ def create_features(df: pd.DataFrame, data_dir_output: str, strategy: str, targe
         df = df[df[target_column] < threshold]
         logger.info(f"\t Filtered extreme values for {target_column} < 95th percentile ({threshold:.2f}). Rows: {original_len} -> {len(df)}")
 
-    feature_path = f"{data_dir_output}/df_features_{strategy}_{target_column}.csv"
+    feature_path = os.path.join(os.getcwd(), f"{data_dir_output}/df_features_{strategy}_{target_column}.csv")
 
     return (df, feature_path)
 
-def run_prepare_data_pipeline(strategy: str, targets_input : list = None, data_dir_input: str = "data/raw", data_dir_output: str = "data/processed") -> None:
+def run_prepare_data_pipeline(
+    strategy: str = "incident_analysis",
+    targets_input: list[str] | None = None,
+    data_dir_input: str = os.path.join("data", "raw"),
+    data_dir_output: str = os.path.join("data", "processed")
+) -> None:
     """
-        Run the prepare data (feauture engineering) loop using the specified strategy
+        Run the prepare data (feature engineering) loop using the specified strategy.
 
-        Args:
-            strategy (str): 'traffic_analysis' or 'incident_analysis'
-            data_dir_input (str): path to live data collected, by default "data/raw"
-            data_dir_output (str): path to processed data, by default "data/processed"          
+        Defaults:
+            - strategy: 'incident_analysis'
+            - data_dir_input: './data/raw'
+            - data_dir_output: './data/processed'
+
+        Environment fallback:
+            DATAPREP_DEFAULT_STRATEGY
+            DATAPREP_DEFAULT_INPUT_DIR
+            DATAPREP_DEFAULT_OUTPUT_DIR
+            DATAPREP_DEFAULT_TARGETS
     """
     
+    ## Resolve env-based defaults    
+    strategy = os.getenv("DATAPREP_DEFAULT_STRATEGY", strategy)
+    data_dir_input = os.getenv("DATAPREP_DEFAULT_INPUT_DIR", data_dir_input)
+    data_dir_output = os.getenv("DATAPREP_DEFAULT_OUTPUT_DIR", data_dir_output)
+
+    if not os.path.isabs(data_dir_input):
+        data_dir_input = os.path.join(os.getcwd(), data_dir_input)
+    if not os.path.isabs(data_dir_output):
+        data_dir_output = os.path.join(os.getcwd(), data_dir_output)
+
+    os.makedirs(data_dir_output, exist_ok=True)
+
+    ## Targets: if list empty / blank string -> env
+    if (not targets_input) or (isinstance(targets_input, str) and targets_input.strip() == ""):
+        env_targets = os.getenv("DATAPREP_DEFAULT_TARGETS", "")
+        targets_input = [t.strip() for t in env_targets.split(",") if t.strip()] or None
+
+    ## Normalize relative paths (keep absolute as-is)
+    if not os.path.isabs(data_dir_input):
+        data_dir_input = os.path.join(os.getcwd(), data_dir_input)
+    if not os.path.isabs(data_dir_output):
+        data_dir_output = os.path.join(os.getcwd(), data_dir_output)
+
+    data_dir_output = data_dir_output.replace("/workspace/DataPreparation","/DataPreparation")
+    os.makedirs(data_dir_output, exist_ok=True)
+
+    logger.info(f"[DataPrep Config] strategy={strategy} input={data_dir_input} output={data_dir_output} targets={targets_input}")
+
+    ## Optional override for extra features
+    extra_flag = os.getenv("DATAPREP_ENABLE_EXTRA_FEATURES")
+    if extra_flag:
+        enabled = str(extra_flag).lower() in ("1", "true", "yes", "on")
+        if enabled != ENABLE_EXTRA_FEATURES:
+            logger.info(f"Overriding ENABLE_EXTRA_FEATURES -> {enabled}")
+
     try:
-        ## Load and merge the CSV files for the given strategy
         df = load_and_merge_files(strategy, data_dir_input)
 
-        ## Determine the default targets allowed for this strategy, either default or user provided
         default_targets = [t for t, meta in TARGET_METADATA.items() if strategy in meta["strategies"]]
         selected_targets = targets_input if targets_input else default_targets
-
-        ## Filter valid targets for the current strategy, and return error if no valid targets
         targets = [t for t in selected_targets if strategy in TARGET_METADATA.get(t, {}).get("strategies", [])]
+
         if not targets:
             logger.warning(f"No valid targets for strategy '{strategy}'. Skipping.")
+            return
 
-        ## Loop through each target and train the model
         for target_name in targets:
-
-            logger.info(f"\t TARGET : {target_name} \n")
+            logger.info(f"\t TARGET : {target_name}")
             try:
-                result = create_features(df, data_dir_output, strategy, target_name)
-                df_clean = result[0]
-                feature_path = result[1]               
+                df_clean, feature_path = create_features(df, data_dir_output, strategy, target_name)
                 df_clean.to_csv(feature_path, index=False)
-                logger.info(f"\t Saved feature-engineered DataFrame to {feature_path}")               
+                logger.info(f"\t Saved feature-engineered DataFrame to {feature_path}")
             except Exception as e:
                 logger.warning(f"Error during prepare data for target '{target_name}': {e}")
 
     except Exception as e:
         logger.warning(f"Error while feature engineering strategy '{strategy}': {e}")
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Run prepare_data pipeline")
+    parser.add_argument("--strategy", "-s",  default="incident_analysis", help="Strategy")
+    parser.add_argument("--targets", nargs="*", default=None, help="Optional list of targets")
+    parser.add_argument("--input", default="data/raw", help="Input data dir")
+    parser.add_argument("--output", default="data/processed", help="Output data dir")
+    args = parser.parse_args()
+
+    args = parser.parse_args()
+    
+    ## Set absolute to relative path
+    data_dir_output = args.output
+
+    os.makedirs(data_dir_output, exist_ok= True)
+    logger.info("=== Running prepare data pipeline (standalone mode) ===")
+    logger.info(f"=== data_dir_input ==={args.input}")
+    logger.info(f"=== data_dir_output ==={data_dir_output}")
+    
+    run_prepare_data_pipeline(
+        strategy=args.strategy,
+        targets_input=args.targets,
+        data_dir_input=args.input,
+        data_dir_output=data_dir_output
+    )
