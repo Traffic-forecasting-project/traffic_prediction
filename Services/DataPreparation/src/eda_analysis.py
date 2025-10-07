@@ -13,19 +13,27 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from io import StringIO 
-from Services.FastAPI.src.logging_utils import get_logger, log_execution_time_and_path
+from io import StringIO
 
-from Services.utils.utils import (
-    save_summary_stats
-)
-
-from Services.FastAPI.src.constants import (
-    TARGETS,
-    LIVE_DATA_DIR,
-    EDA_OUTPUT_DIR,
-    PROCESSED_DATA_DIR 
-)
+## Imports for "microservice" et "legacy" structures respectively
+try:
+    from Services.FastAPI.src.logging_utils import get_logger, log_execution_time_and_path
+    from Services.utils.utils import save_summary_stats
+    from Services.FastAPI.src.constants import (
+        TARGETS,
+        LIVE_DATA_DIR,
+        EDA_OUTPUT_DIR,
+        PROCESSED_DATA_DIR 
+    )
+except:
+    from src.core.logging_utils import get_logger, log_execution_time_and_path
+    from src.utils.utils import save_summary_stats
+    from src.core.constants import (
+        TARGETS,
+        LIVE_DATA_DIR,
+        EDA_OUTPUT_DIR,
+        PROCESSED_DATA_DIR 
+    )
 
 ## Initialize logger
 logger = get_logger(__name__)
@@ -232,22 +240,29 @@ def generate_eda_report(csv_path: str, target: str = "mean_delay"):
     logger.info(f"\t [EDA] Report generated for {target} in folder: {output_folder}")
 
 @log_execution_time_and_path
-def run_eda_pipeline(strategy: str) -> None:
+def run_eda_pipeline(
+    strategy: str = "incident_analysis",
+    live_data_dir: str = os.path.join("data", "live"),
+    processed_data_dir: str = os.path.join("data", "processed"),
+    eda_output_dir: str = os.path.join("eda")
+) -> None:
     """
-        Run EDA analysis using the specified strategy and live data
+        Run EDA analysis using the specified strategy and directories.
 
         Args:
-            strategy (str): 'traffic_analysis' or 'incident_analysis'          
+            strategy (str): 'traffic_analysis' or 'incident_analysis'
+            live_data_dir (str): Path to directory containing live CSV files
+            processed_data_dir (str): Path to processed feature-engineered data
+            eda_output_dir (str): Path where EDA results will be saved
     """
-    
     try:
 
         ## Path to store all global stats
-        summary_path = os.path.join(EDA_OUTPUT_DIR, "eda_summary.csv")
+        summary_path = os.path.join(eda_output_dir, "eda_summary.csv")
 
         ## Perform EDA on raw live data grouped by strategy
         for strategy in ["incident_analysis", "traffic_analysis"]:
-            pattern = os.path.join(LIVE_DATA_DIR, f"live_data_{strategy}*")
+            pattern = os.path.join(live_data_dir, f"live_data_{strategy}*")
             files = glob.glob(pattern)
 
             if files:
@@ -256,18 +271,18 @@ def run_eda_pipeline(strategy: str) -> None:
                 logger.warning(f"[EDA] No files found for strategy: {strategy}")
 
         ## Perform EDA on all feature-engineered exports
-        export_files = glob.glob(os.path.join(PROCESSED_DATA_DIR, "*.csv"))
+        export_files = glob.glob(os.path.join(processed_data_dir, "*.csv"))
         for f in export_files:
             label = os.path.splitext(os.path.basename(f))[0]
             load_and_analyze_group(f"exports_{label}", [f], summary_path)
 
         ## Final summary logs
-        logger.info(f"\t All visualizations saved to: {EDA_OUTPUT_DIR}/")
+        logger.info(f"\t All visualizations saved to: {eda_output_dir}/")
         logger.info(f"\t Summary statistics CSV: {summary_path}")
 
         ## Loop through each target and generate EDA report
         for target in TARGETS:
-            tmp_var = PROCESSED_DATA_DIR.replace("/DataCollection/data/DataPreparation","/DataPreparation/data")
+            tmp_var = processed_data_dir.replace("/DataCollection/data/DataPreparation","/DataPreparation/data")
             csv_file = f"{tmp_var}/df_features_incident_analysis_{target}.csv"
             if os.path.exists(csv_file):
                 logger.info(f"\t Generating EDA report for {target}...")
@@ -278,13 +293,19 @@ def run_eda_pipeline(strategy: str) -> None:
     except Exception as e:
         logger.warning(f"Error while EDA analysis for strategy '{strategy}': {e}")
        
-
-
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-s", "--strategy", type=str, default="incident_analysis")
+    parser = argparse.ArgumentParser(description="Run EDA analysis pipeline.")
+    parser.add_argument("--strategy", type=str, default="incident_analysis")
+    parser.add_argument("--live-dir", type=str, default=os.path.join("data", "live"))
+    parser.add_argument("--processed-dir", type=str, default=os.path.join( "data", "processed"))
+    parser.add_argument("--eda-dir", type=str, default=os.path.join("eda"))
     args = parser.parse_args()
 
-    run_eda_pipeline(strategy=args.strategy)
+    run_eda_pipeline(
+        strategy=args.strategy,
+        live_data_dir=args.live_dir,
+        processed_data_dir=args.processed_dir,
+        eda_output_dir=args.eda_dir
+    )
