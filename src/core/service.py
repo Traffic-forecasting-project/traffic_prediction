@@ -18,6 +18,7 @@ import csv
 import numpy as np
 import os
 import json
+import sys
 from pathlib import Path
 
 ## Imports for "microservice" et "legacy" structures respectively
@@ -75,6 +76,7 @@ FEATURE_FILE = Path("resources/feature_importances.json")  # Fallback file for f
 
 ## MODEL_PATH is now safe and works everywhere
 MODEL_PATH = MODEL_PATH.replace("Services\\", "")
+MODEL_PATH = MODEL_PATH.replace("Services/", "")
 
 ## ============================
 ## FastAPI app initialization
@@ -291,8 +293,18 @@ def predict(
 
         ## Load model (idempotent for tests; could be cached in prod)
         logger.info(f"Loading model from: {MODEL_PATH}")
-        mdl = joblib.load(MODEL_PATH)
 
+        try:
+            mdl = joblib.load(MODEL_PATH)
+            logger.info("Model successfully loaded from %s", os.path.abspath(MODEL_PATH))
+        except (EOFError, OSError, FileNotFoundError) as e:
+            logger.error(f"Failed to load model from {MODEL_PATH}: {e}")
+            logger.error("The model file may be missing, empty, or corrupted. Please retrain it.")
+            sys.exit(1)
+        except Exception as e:
+            logger.exception(f"Unexpected error while loading model from {MODEL_PATH}: {e}")
+            sys.exit(1)
+        
         ## Determine feature order (from model or JSON fallback)
         feature_order = []
         if hasattr(mdl, "feature_names_in_"):
@@ -389,7 +401,16 @@ def run_fastapi_service_pipeline(
         logger.error(f"Model file not found: {model_path}")
         raise FileNotFoundError(f"Model file not found at {model_path}")
 
-    model = joblib.load(model_path)
+    try:
+        model = joblib.load(model_path)
+        logger.info("Model successfully loaded from %s", os.path.abspath(model_path))
+    except (EOFError, OSError, FileNotFoundError) as e:
+        logger.error(f"Failed to load model from {model_path}: {e}")
+        logger.error("The model file may be missing, empty, or corrupted. Please retrain it.")
+        sys.exit(1)
+    except Exception as e:
+        logger.exception(f"Unexpected error while loading model from {model_path}: {e}")
+        sys.exit(1)
 
     ## Load features from model or JSON fallback
     try:
