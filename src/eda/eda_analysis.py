@@ -297,10 +297,11 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Run EDA analysis pipeline.")
-    parser.add_argument("--strategy", type=str, default="incident_analysis")
-    parser.add_argument("--live-dir", type=str, default=os.path.join("data", "live"))
-    parser.add_argument("--processed-dir", type=str, default=os.path.join( "data", "processed"))
-    parser.add_argument("--eda-dir", type=str, default=os.path.join("eda"))
+    parser.add_argument("-s", "--strategy", type=str, default="incident_analysis")
+    parser.add_argument("-l", "--live-dir", type=str, default=os.path.join("data", "live"))
+    parser.add_argument("-p", "--processed-dir", type=str, default=os.path.join("data", "processed"))
+    parser.add_argument("-e", "--eda-dir", type=str, default=os.path.join("eda"))
+
     args = parser.parse_args()
 
     run_eda_pipeline(

@@ -1,34 +1,37 @@
 ''' 
-__author__ = -
+__author__ = "-"
 __copyright__ = None
 __version__ = "1.0.0"
 __email__ = "georges.nassopoulos@gmail.com"
 __status__ = "Dev"
-__desc__ = "Airflow DAG with selective skipping of tasks, conditional evaluation, and FileSensors"
+__desc__ = "Airflow DAG for the traffic prediction MLOps pipeline, with selective task skipping, sensors, and refined Docker volume mounts."
 '''
 
 ## ==================================================================
 ## Standard library imports
 ## ==================================================================
 import os
+import platform
+import subprocess
 from datetime import datetime
-from pathlib import Path
 from typing import Dict, Optional
+from docker.types import Mount
 
 ## ==================================================================
 ## Airflow imports
 ## ==================================================================
 from airflow import DAG
 from airflow.models import Variable
-from airflow.operators.empty import EmptyOperator
 from airflow.sensors.filesystem import FileSensor
-from docker.types import Mount
 
 ## ==================================================================
 ## Project imports
 ## ==================================================================
 from Services.FastAPI.src.logging_utils import get_logger
-from Services.FastAPI.src.custom_operators import LiveDataDockerOperator, ConditionalDockerOperator
+from Services.FastAPI.src.custom_operators import (
+    LiveDataDockerOperator,
+    ConditionalDockerOperator,
+)
 
 ## ==================================================================
 ## Logger setup
@@ -36,62 +39,41 @@ from Services.FastAPI.src.custom_operators import LiveDataDockerOperator, Condit
 logger = get_logger(__name__)
 
 ## ==================================================================
-## Project paths
+## Environment detection (Windows vs Unix)
 ## ==================================================================
-## Fix directly the project root
-
-PROJECT_ROOT = os.getenv("APP_INPUTDIR")
-DATA_PATH = os.path.join("/workspace",os.getenv("DATA_PATH")) 
-
-LIVE_DATA_PATH= os.path.join(DATA_PATH,"live")
-
-LIVE_DATA_FILE: str = os.path.join(LIVE_DATA_PATH,"live_data_incident_analysis.1.csv")
-
-MODEL_PATH: str = "Services/model/model_incident_analysis_incident_duration_min.joblib"
-
+IS_WINDOWS = platform.system().lower().startswith("win")
+MOUNT_TMP_DIR = not IS_WINDOWS  # Disable mount_tmp_dir on Windows
+logger.info(f"Running on {'Windows' if IS_WINDOWS else 'Unix-like'} system. mount_tmp_dir={MOUNT_TMP_DIR}")
 
 ## ==================================================================
-## Global monitoring options (for LiveDataDockerOperator)
+## Configuration variables
 ## ==================================================================
-MAX_DURATION: int = int(os.getenv("MAX_DURATION", 100))  ## seconds
-MIN_LINE_INCREASE: int = int(os.getenv("MIN_LINE_INCREASE", 1000))
-MODE: str = os.getenv("LIVE_MONITOR_MODE", "time")  ## "time", "lines", "both"
+MAX_DURATION = int(os.getenv("MAX_DURATION", 100))
+MIN_LINE_INCREASE = int(os.getenv("MIN_LINE_INCREASE", 1000))
+MODE = os.getenv("LIVE_MONITOR_MODE", "time")
+RUN_MODE = os.getenv("RUN_MODE", "manual")
+LIVE_FILE_TIMEOUT = int(os.getenv("LIVE_FILE_TIMEOUT", 3600))
+MODEL_FILE_TIMEOUT = int(os.getenv("MODEL_FILE_TIMEOUT", 1800))
 
 ## ==================================================================
-## FileSensor options
-## ==================================================================
-RUN_MODE: str = os.getenv("RUN_MODE", "manual")  ## "manual" or "continuous"
-LIVE_FILE_TIMEOUT: int = int(os.getenv("LIVE_FILE_TIMEOUT", 3600))  ## seconds
-MODEL_FILE_TIMEOUT: int = int(os.getenv("MODEL_FILE_TIMEOUT", 1800))  ## seconds
-
-
-## ==================================================================
-## Skip flags for optional tasks
+## Helper for skip flags
 ## ==================================================================
 def get_skip_flag(name: str) -> bool:
-    """
-    ## Helper function to read skip flag
-    - Priority: Airflow Variable > Environment variable > default False
-    """
-    return Variable.get(
-        name,
-        os.getenv(name, "false")
-    ).lower() in ["true", "1", "yes"]
+    """Retrieve a skip flag for a given task."""
+    return Variable.get(name, os.getenv(name, "false")).lower() in ["true", "1", "yes"]
 
-#SKIP_COLLECT_LIVE_DATA = True
-SKIP_COLLECT_LIVE_DATA: bool = get_skip_flag("SKIP_COLLECT_LIVE_DATA")
-SKIP_SYNC_DATA: bool = get_skip_flag("SKIP_SYNC_DATA")
-SKIP_PREPROCESS_DATA: bool = get_skip_flag("SKIP_PREPROCESS_DATA")
-SKIP_EDA_ANALYSIS: bool = get_skip_flag("SKIP_EDA_ANALYSIS")
-SKIP_TRAIN_MODEL: bool = get_skip_flag("SKIP_TRAIN_MODEL")
+## ==================================================================
+## Skip flags per stage
+## ==================================================================
+SKIP_COLLECT_LIVE_DATA = get_skip_flag("SKIP_COLLECT_LIVE_DATA")
+SKIP_SYNC_DATA = get_skip_flag("SKIP_SYNC_DATA")
+SKIP_PREPROCESS_DATA = get_skip_flag("SKIP_PREPROCESS_DATA")
+SKIP_EDA_ANALYSIS = get_skip_flag("SKIP_EDA_ANALYSIS")
+SKIP_TRAIN_MODEL = get_skip_flag("SKIP_TRAIN_MODEL")
 
 logger.info(
-    "Task skipping options: COLLECT=%s, PREPROCESS=%s, EDA=%s, TRAIN=%s",
-    SKIP_COLLECT_LIVE_DATA,
-    SKIP_SYNC_DATA,
-    SKIP_PREPROCESS_DATA,
-    SKIP_EDA_ANALYSIS,
-    SKIP_TRAIN_MODEL,
+    "Skip options: COLLECT=%s | SYNC=%s | PREPROCESS=%s | EDA=%s | TRAIN=%s",
+    SKIP_COLLECT_LIVE_DATA, SKIP_SYNC_DATA, SKIP_PREPROCESS_DATA, SKIP_EDA_ANALYSIS, SKIP_TRAIN_MODEL
 )
 
 ## ==================================================================
@@ -108,107 +90,191 @@ default_args: Dict[str, object] = {
 ## ==================================================================
 dag = DAG(
     dag_id="main_pipeline_dag",
-    description="MLOps pipeline for traffic prediction with selective skips and sensors",
+    description="Traffic prediction MLOps pipeline with selective skipping and volume mounts.",
     default_args=default_args,
-    schedule_interval=None,  ## Manual trigger only
+    schedule_interval=None,
     catchup=False,
     tags=["mlops", "traffic", "pipeline"],
 )
 
 ## ==================================================================
-## Task 1: Data Collection (optional)
+## Mount definitions (auto-detected from inside the container)
+## ==================================================================
+logger.info("***************************************************************")
+logger.info("********************** ABSOLUTE PATH DEBUG ********************")
+logger.info("***************************************************************")
+
+try:
+    ## Discover absolute project root dynamically
+    PROJECT_ROOT = os.path.abspath(os.getcwd())
+    DATA_PATH = os.path.join(PROJECT_ROOT, "data")
+    MODEL_PATH = os.path.join(PROJECT_ROOT, "model")
+    LIVE_DATA_FILE = os.path.join(DATA_PATH, "live", "live_data_incident_analysis.1.csv")
+    MODEL_FILE = os.path.join(MODEL_PATH, "model_incident_analysis_incident_duration_min.joblib")
+
+    ## Print detected paths
+    logger.info(f"*** PROJECT_ROOT DETECTED: {PROJECT_ROOT}")
+    logger.info(f"*** DATA_PATH DETECTED: {DATA_PATH}")
+    logger.info(f"*** MODEL_PATH DETECTED: {MODEL_PATH}")
+    logger.info(f"*** LIVE_DATA_FILE DETECTED: {LIVE_DATA_FILE}")
+    logger.info(f"*** MODEL_FILE DETECTED: {MODEL_FILE}")
+    
+    ## List key directories for debugging
+    logger.info("*** RUNNING PWD CHECK ***")
+    logger.info(subprocess.check_output(["pwd"], text=True))
+
+    logger.info("*** LISTING PROJECT ROOT ***")
+    logger.info(subprocess.check_output(["ls", "-l", PROJECT_ROOT], text=True))
+
+    logger.info("*** LISTING DATA PATH ***")
+    logger.info(subprocess.check_output(["ls", "-l", DATA_PATH], text=True))
+
+    logger.info("*** LISTING MODEL PATH ***")
+    logger.info(subprocess.check_output(["ls", "-l", MODEL_PATH], text=True))
+except Exception as e:
+    logger.warning(f"ABSOLUTE PATH DISCOVERY FAILED: {e}")
+
+logger.info("***************************************************************")
+logger.info("******************** END ABSOLUTE PATH DEBUG ******************")
+logger.info("***************************************************************")
+
+## ==================================================================
+## FIX: Ensure required subdirectories exist inside /opt/airflow/data
+## ==================================================================
+try:
+    for subfolder in ["live", "raw", "processed"]:
+        folder_path = os.path.join("/opt/airflow/data", subfolder)
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path, exist_ok=True)
+            logger.info(f"Created missing folder: {folder_path}")
+        else:
+            logger.info(f"Verified existing folder: {folder_path}")
+except Exception as e:
+    logger.warning(f"FOLDER CREATION FAILED: {e}")
+
+## ==================================================================
+## FIXED HOST MOUNTS (STATIC PATH)
+## ==================================================================
+try:
+    #HOST_ROOT = "/mnt/c/Users/user/Desktop/mlops_tomtom_traffic/traffic_prediction"
+    HOST_ROOT = os.getenv("HOST_ROOT", os.getcwd())
+    DATA_MOUNT = Mount(
+        source=f"{HOST_ROOT}/data",
+        target="/opt/airflow/data",
+        type="bind"
+    )
+    MODEL_MOUNT = Mount(
+        source=f"{HOST_ROOT}/model",
+        target="/opt/airflow/model",
+        type="bind"
+    )
+
+    logger.info("***************************************************************")
+    logger.info("********************** MOUNT CONFIRMATION *********************")
+    logger.info("***************************************************************")
+    logger.info(f"DATA_MOUNT SOURCE: {getattr(DATA_MOUNT, 'source', None)}")
+    logger.info(f"MODEL_MOUNT SOURCE: {getattr(MODEL_MOUNT, 'source', None)}")
+    logger.info(f"DATA_MOUNT TARGET: {getattr(DATA_MOUNT, 'target', None)}")
+    logger.info(f"MODEL_MOUNT TARGET: {getattr(MODEL_MOUNT, 'target', None)}")
+    logger.info("***************************************************************")
+    logger.info("******************** END MOUNT CONFIRMATION *******************")
+    logger.info("***************************************************************")
+
+except Exception as e:
+    logger.warning(f"MOUNT CONFIGURATION FAILED: {e}")
+
+## ==================================================================
+## Task 1: Live Data Collection
 ## ==================================================================
 if not SKIP_COLLECT_LIVE_DATA:
     collect_live_data = LiveDataDockerOperator(
         task_id="collect_live_data",
         image="data_collector:latest",
-	command = (
-    		"python /workspace/Services/DataCollection/src/live_data_collector.py "
-    		f"--arrondissement 1 --strategy incident_analysis "
-    		f"--max-rows {MIN_LINE_INCREASE} "
-    		f"--max-duration {MAX_DURATION} "
-    		f"--arrondissements-path  {DATA_PATH}/arrondissements.csv"
-	),
+        command=(
+            "python /opt/airflow/Services/DataCollection/src/live_data_collector.py "
+            f"--arrondissement 1 --strategy incident_analysis "
+            f"--max-rows {MIN_LINE_INCREASE} --max-duration {MAX_DURATION} "
+            f"--arrondissements-path /opt/airflow/data/arrondissements.csv"
+        ),
         docker_url="unix://var/run/docker.sock",
         network_mode="bridge",
-        mounts=[Mount(source=PROJECT_ROOT, target="/workspace", type="bind")],
-        monitor_file=str(LIVE_DATA_FILE),
+        mounts=[DATA_MOUNT, MODEL_MOUNT],
+        monitor_file="/opt/airflow/data/live/live_data_incident_analysis.1.csv",
         max_duration=MAX_DURATION,
         min_line_increase=MIN_LINE_INCREASE,
         mode=MODE,
+        mount_tmp_dir=False,
         dag=dag,
     )
 else:
     collect_live_data = None
     logger.info("Skipping task: collect_live_data")
-   
+
 ## ==================================================================
-## Task 1b: FileSensor for live data (only in continuous mode)
+## Task 1b: Wait for live data file
 ## ==================================================================
 if RUN_MODE == "continuous":
     wait_for_live_file = FileSensor(
         task_id="wait_for_live_file",
         fs_conn_id="fs_project",
-        filepath=LIVE_DATA_FILE,
+        filepath="/opt/airflow/data/live/live_data_incident_analysis.1.csv",
         poke_interval=60,
         timeout=LIVE_FILE_TIMEOUT,
         mode="poke",
         dag=dag,
     )
-
 else:
     wait_for_live_file = None
     logger.info("Skipping FileSensor for live data (RUN_MODE=manual)")
 
 ## ==================================================================
-## Task 1c: Data Collection : Synchronisation
+## Task 1c: Synchronize live → raw
 ## ==================================================================
 if not SKIP_SYNC_DATA:
     sync_data = ConditionalDockerOperator(
         task_id="sync_data",
         image="data_collector:latest",
-        command="python -u Services/DataCollection/src/sync_live_to_raw.py --delete-live",
+        command="python -u /opt/airflow/Services/DataCollection/src/sync_live_to_raw.py --delete-live",
         docker_url="unix://var/run/docker.sock",
         network_mode="bridge",
-        mounts=[Mount(source=PROJECT_ROOT, target="/workspace", type="bind")],
+        mounts=[DATA_MOUNT, MODEL_MOUNT],
+        mount_tmp_dir=False,
         dag=dag,
     )
-
 else:
     sync_data = None
     logger.info("Skipping task: sync_data")
 
-
-
 ## ==================================================================
-## Task 2: Data Preparation : Feature extraction (optional)
+## Task 2: Data Preparation
 ## ==================================================================
 if not SKIP_PREPROCESS_DATA:
     preprocess_data = ConditionalDockerOperator(
         task_id="preprocess_data",
         image="data_preparation:latest",
-        command="python -u Services/DataPreparation/src/prepare_data.py -s incident_analysis",
+        command="python -u /opt/airflow/Services/DataPreparation/src/prepare_data.py -s incident_analysis",
         docker_url="unix://var/run/docker.sock",
         network_mode="bridge",
-        mounts=[Mount(source=PROJECT_ROOT, target="/workspace", type="bind")],
+        mounts=[DATA_MOUNT, MODEL_MOUNT],
+        mount_tmp_dir=False,
         dag=dag,
     )
-
 else:
     preprocess_data = None
     logger.info("Skipping task: preprocess_data")
 
 ## ==================================================================
-## Task 3: EDA Analysis (optional)
+## Task 3: EDA Analysis
 ## ==================================================================
 if not SKIP_EDA_ANALYSIS:
     eda_analysis = LiveDataDockerOperator(
         task_id="eda_analysis",
         image="data_preparation:latest",
-        command="python Services/DataPreparation/src/eda_analysis.py -s incident_analysis",
+        command="python /opt/airflow/Services/DataPreparation/src/eda_analysis.py -s incident_analysis",
         docker_url="unix://var/run/docker.sock",
         network_mode="bridge",
-        mounts=[Mount(source=PROJECT_ROOT, target="/workspace", type="bind")],
+        mounts=[DATA_MOUNT, MODEL_MOUNT],
+        mount_tmp_dir=False,
         dag=dag,
     )
 else:
@@ -216,19 +282,20 @@ else:
     logger.info("Skipping task: eda_analysis")
 
 ## ==================================================================
-## Task 4: Model Training (optional, conditional)
+## Task 4: Model Training
 ## ==================================================================
 if not SKIP_TRAIN_MODEL:
     train_model = ConditionalDockerOperator(
         task_id="train_model",
         image="model_training:latest",
-        command="python Services/ModelTraining/src/train_model.py -s incident_analysis",
+        command="python /opt/airflow/Services/ModelTraining/src/train_model.py -s incident_analysis",
         docker_url="unix://var/run/docker.sock",
         network_mode="bridge",
-        mounts=[Mount(source=PROJECT_ROOT, target="/workspace", type="bind")],
-        required_path=f"/workspace/data/processed",
+        mounts=[DATA_MOUNT, MODEL_MOUNT],
+        required_path="/opt/airflow/data/processed",
         must_exist=True,
         must_have_lines=True,
+        mount_tmp_dir=False,
         dag=dag,
     )
 else:
@@ -236,12 +303,13 @@ else:
     logger.info("Skipping task: train_model")
 
 ## ==================================================================
-## Task 5b: FileSensor for model presence
+## Task 5b: Wait for Model File
 ## ==================================================================
 wait_for_model_file = FileSensor(
     task_id="wait_for_model_file",
-    fs_conn_id="fs_project",
-    filepath="/workspace/Services/model/model_incident_analysis_incident_duration_min.joblib",
+    #fs_conn_id="fs_project",
+    fs_conn_id="fs_default",
+    filepath="/opt/airflow/model/model_incident_analysis_incident_duration_min.joblib",
     poke_interval=30,
     timeout=MODEL_FILE_TIMEOUT,
     mode="poke",
@@ -249,16 +317,16 @@ wait_for_model_file = FileSensor(
 )
 
 ## ==================================================================
-## Task 5: Model Registration (conditional)
+## Task 5: Model Registration
 ## ==================================================================
 register_model = ConditionalDockerOperator(
     task_id="register_model",
     image="model_training:latest",
-    command="python Services/ModelTraining/src/register_model.py",
+    command="python /opt/airflow/Services/ModelTraining/src/register_model.py",
     docker_url="unix://var/run/docker.sock",
     network_mode="bridge",
-    mounts=[Mount(source=PROJECT_ROOT, target="/workspace", type="bind")],
-    required_path=str("/workspace/" + MODEL_PATH),
+    mounts=[DATA_MOUNT, MODEL_MOUNT],
+    required_path="/opt/airflow/model/model_incident_analysis_incident_duration_min.joblib",
     must_exist=True,
     must_have_lines=False,
     mount_tmp_dir=False,
@@ -266,12 +334,12 @@ register_model = ConditionalDockerOperator(
 )
 
 ## ==================================================================
-## DAG Flow (dynamic chaining)
+## DAG Flow Definition
 ## ==================================================================
 previous_task: Optional[object] = None
 for task in [
     collect_live_data,
-    wait_for_live_file,   ## only active in continuous mode
+    wait_for_live_file,
     sync_data,
     preprocess_data,
     eda_analysis,
