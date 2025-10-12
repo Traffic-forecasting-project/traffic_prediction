@@ -99,6 +99,8 @@ services:
       args:
         APP_INPUTDIR: ${APP_INPUTDIR:-${PWD:-%cd%}}
 
+    env_file:
+    - .env
     image: model_training:latest            ## Image name
     container_name: model_training          ## Container name
 
@@ -118,6 +120,7 @@ services:
     container_name: prometheus
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml  # Fichier de config
+      # - ./monitoring/prometheus/alert.rules.yml:/etc/prometheus/alert.rules.yml
     ports:
       - "9090:9090"
     networks:
@@ -156,15 +159,21 @@ services:
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
+    user: "0:0" # root temporairement
+    entrypoint: >
+      sh -c "chown -R 472:472 /var/lib/grafana && exec grafana-server"
     ports:
-      - "3000:3000"                        # Accès via http://localhost:3000
-    depends_on:
-      - prometheus
+      - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
-      - ./monitoring/grafana:/var/lib/grafana  # Persistance des dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana:/var/lib/grafana
+    depends_on:
+      - prometheus
     networks:
       - default
 

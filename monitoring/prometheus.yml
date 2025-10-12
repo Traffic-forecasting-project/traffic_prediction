@@ -1,6 +1,9 @@
 global:
   scrape_interval: 5s  # Fréquence de collecte (5 secondes)
 
+# rule_files:
+#   - /etc/prometheus/alert.rules.yml
+
 scrape_configs:
   - job_name: "prometheus"
     static_configs:
