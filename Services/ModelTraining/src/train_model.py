@@ -76,6 +76,12 @@ except:
 
 logger = get_logger("train_model")
 
+if os.getenv("DAGSHUB_TOKEN"):
+    dagshub.auth.add_app_token(os.getenv("DAGSHUB_TOKEN"))
+    logger.info(f"[Dagshub] ! Using token authentication for {os.getenv('DAGSHUB_USER')}")
+else:
+    logger.warning("[Dagshub] ! No DAGSHUB_TOKEN found — OAuth will be used.")
+
 @log_execution_time_and_path
 def train_model(
     df: pd.DataFrame,

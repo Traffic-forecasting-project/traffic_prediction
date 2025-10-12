@@ -40,7 +40,12 @@ except:
     from src.core.logging_utils import get_logger
     
 logger = get_logger(__name__)
-
+if os.getenv("DAGSHUB_TOKEN"):
+    dagshub.auth.add_app_token(os.getenv("DAGSHUB_TOKEN"))
+    logger.info(f"[Dagshub] ! Using token authentication for {os.getenv('DAGSHUB_USER')}")
+else:
+    logger.warning("[Dagshub] ! No DAGSHUB_TOKEN found — OAuth will be used.")
+    
 ## ============================================================
 ##  Display artifacts and let user select model directory
 ## ============================================================
