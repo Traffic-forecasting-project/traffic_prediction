@@ -1,4 +1,4 @@
 strategy,target,model_type,metric,value,mae,r2,medae,model_path
-incident_analysis,jam_factor,regressor,rmse,0.022648522898800927,0.005370861091246629,0.9812170508993493,1.5543122344752192e-15,/home/mvilla/DST_MLOPS/project/traffic_prediction/model/model_incident_analysis_jam_factor.joblib
-incident_analysis,incident_duration_min,regressor,rmse,274.89119196108476,9.397802724257515,0.6571792080405257,5.046284291362312,/home/mvilla/DST_MLOPS/project/traffic_prediction/model/model_incident_analysis_incident_duration_min.joblib
-incident_analysis,mean_magnitude,regressor,rmse,0.1002531346854516,0.1405472539209843,0.9605335835055324,0.0,/home/mvilla/DST_MLOPS/project/traffic_prediction/model/model_incident_analysis_mean_magnitude.joblib
+incident_analysis,jam_factor,regressor,rmse,1.290878778475233,0.5115576906296075,0.34715239267851183,0.08647746747119456,model\model_incident_analysis_jam_factor.joblib
+incident_analysis,incident_duration_min,regressor,rmse,10.039734138827448,6.6110777753656205,0.42268941506644453,3.1304943600953123,model\model_incident_analysis_incident_duration_min.joblib
+incident_analysis,mean_magnitude,regressor,rmse,0.4352617347961773,0.36944444444444446,0.8524454326923077,0.33000000000000007,model\model_incident_analysis_mean_magnitude.joblib

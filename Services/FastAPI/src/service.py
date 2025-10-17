@@ -342,6 +342,99 @@ def predict(
         logger.error(f"Prediction failed: {e}")
         raise HTTPException(status_code=500, detail="Prediction failed")
 
+
+@app.post("/batch-predict", summary="Predict incident_duration_min for multiple samples")
+def batch_predict(
+    input_list: list[DynamicFeatures],
+    current_user=Depends(RoleChecker([ROLE_ADMIN, ROLE_USER]))
+):
+    """
+        Predict multiple incident durations in batch mode
+
+        This endpoint processes a list of prediction requests, each following the DynamicFeatures schema, 
+        and returns all predictions in a single response
+
+        Args:
+            input_list (list[DynamicFeatures]): List of payloads containing
+                feature values for each sample
+            current_user: Authenticated user (admin or user role)
+
+        Returns:
+            dict: JSON object containing a list of predictions
+                Example:
+                {
+                    "predictions": [
+                        {"sample_id": 1, "predicted_incident_duration_min": 3.72},
+                        {"sample_id": 2, "predicted_incident_duration_min": 5.48}
+                    ]
+                }
+
+        Raises:
+            HTTPException(400): If input list is empty
+            HTTPException(500): If preprocessing or prediction fails
+            HTTPException(503): If the model is not available
+    """
+
+    ## Log the username for traceability
+    logger.info(f"Received batch prediction request from user: {current_user.username}")
+
+    ## Check if input is empty to avoid silent failure
+    if not input_list:
+        logger.warning("Empty input list for batch prediction.")
+        raise HTTPException(status_code=400, detail="Input list cannot be empty.")
+
+    ## Check that the model file exists before prediction
+    if not os.path.exists(MODEL_PATH):
+        logger.error(f"Model file not found at {MODEL_PATH}")
+        raise HTTPException(
+            status_code=503,
+            detail="Model not available. Train the model before prediction."
+        )
+
+    try:
+        ## Load the trained model
+        mdl = joblib.load(MODEL_PATH)
+
+        ## Get the feature order (from model or JSON fallback)
+        feature_order = list(mdl.feature_names_in_) if hasattr(mdl, "feature_names_in_") else load_feature_order()
+
+        ## Validate that the feature order is not empty
+        if not feature_order:
+            logger.error("Model feature order missing and JSON fallback unavailable.")
+            raise HTTPException(status_code=500, detail="Model feature order missing.")
+
+        ## Convert each request object to a DataFrame row
+        df_list = [build_full_feature_vector(item, feature_order) for item in input_list]
+
+        ## Concatenate all rows into one batch DataFrame
+        features_df = pd.concat(df_list, ignore_index=True)
+
+        ## Debug print: display first few rows of the DataFrame
+        logger.debug(f"Batch features DataFrame:\n{features_df.head()}")
+
+        ## Perform predictions
+        preds = mdl.predict(features_df)
+
+        ## Build structured JSON results
+        results = [
+            {"sample_id": i + 1, "predicted_incident_duration_min": round(float(p), 2)}
+            for i, p in enumerate(preds)
+        ]
+
+        ## Log the successful completion of the batch
+        logger.info(f"Batch prediction completed successfully for {len(results)} samples.")
+
+        ## Return predictions to client
+        return {"predictions": results}
+
+    except HTTPException:
+        ## Let HTTPExceptions propagate (already well formatted)
+        raise
+    except Exception as e:
+        ## Capture unexpected exceptions and log them
+        logger.exception(f"Batch prediction failed: {e}")
+        raise HTTPException(status_code=500, detail="Batch prediction failed.")
+
 ## ============================
 ## Metrics endpoint
 ## ============================

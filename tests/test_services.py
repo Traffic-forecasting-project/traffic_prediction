@@ -89,6 +89,20 @@ def auth_token(client_instance: TestClient) -> str:
     assert response.status_code == 200
     return response.json()["access_token"]
 
+@pytest.fixture(scope="module")
+def token_header(auth_token: str) -> dict:
+    """
+        Fixture to return the Authorization header with the Bearer token
+
+        Args:
+            auth_token (str): JWT token obtained from the login route
+
+        Returns:
+            dict: Authorization header usable in authenticated API calls
+    """
+    
+    ## Construct standard Bearer header
+    return {"Authorization": f"Bearer {auth_token}"}
 
 ## ============================
 ## Tests: Login
@@ -209,6 +223,80 @@ def test_predict_success(client_instance, auth_token):
     assert response.status_code == 200
     assert "predicted_incident_duration_min" in response.json()
 
+def test_batch_predict(client_instance, token_header):
+    """
+        Test the /batch-predict endpoint with multiple prediction inputs
+
+        This test ensures that the endpoint correctly handles a list of inputs
+        and returns a list of predictions, each containing a numeric duration value
+
+        Args:
+            client_instance (TestClient): FastAPI test client fixture
+            token_header (dict): Authorization header with Bearer token
+
+        Returns:
+            None. The test passes if the response status is 200 and all returned
+            predictions contain the expected key and value type
+    """
+
+ ## Example payload with two incidents for batch prediction
+    payload = [
+        {
+            "lat": 48.8566,
+            "lon": 2.3522,
+            "incident_count": 1,
+            "icon_category": 3,
+            "length": 1.2,
+            "tmc_tableNumber": 100,
+            "tmc_tableVersion": 10,
+            "avg_speed": 45.0,
+            "free_flow_speed": 50.0,
+            "jam_factor": 5.6,
+            "temp": 19.0,
+            "wind": 4.0,
+            "rain": 0.0,
+            "hour": 9,
+            "weekday": 3
+        },
+        {
+            "lat": 48.8666,
+            "lon": 2.3322,
+            "incident_count": 3,
+            "icon_category": 4,
+            "length": 2.3,
+            "tmc_tableNumber": 101,
+            "tmc_tableVersion": 10,
+            "avg_speed": 37.0,
+            "free_flow_speed": 55.0,
+            "jam_factor": 7.2,
+            "temp": 17.5,
+            "wind": 5.0,
+            "rain": 0.0,
+            "hour": 17,
+            "weekday": 5
+        }
+    ]
+
+    ## Send POST request to the /batch-predict endpoint
+    response = client_instance.post("/batch-predict", json=payload, headers=token_header)
+
+    ## Validate HTTP status code
+    assert response.status_code == 200, f"Unexpected status code: {response.status_code}"
+
+    ## Parse and inspect response JSON
+    result = response.json()
+
+    ## Ensure response structure matches expected format
+    assert isinstance(result, dict), "Expected a JSON object in response."
+    assert "predictions" in result, "Missing 'predictions' key in response."
+    assert isinstance(result["predictions"], list), "'predictions' should be a list."
+
+    ## Verify each prediction object contains the correct field and type
+    for pred in result["predictions"]:
+        assert "predicted_incident_duration_min" in pred, "Missing key in prediction item."
+        assert isinstance(pred["predicted_incident_duration_min"], (int, float)), "Prediction value must be numeric."
+
+    print("/batch-predict endpoint returned valid predictions.")
 
 def test_predict_with_json_fallback(client_instance, auth_token):
     """
