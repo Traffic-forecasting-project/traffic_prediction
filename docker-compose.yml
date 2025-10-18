@@ -108,6 +108,32 @@ services:
 
     command: tail -f /dev/null              ## Keep container idle
 
+  ## ===========================================================
+  ## SERVICE: FastAPI (JWT/RBAC prediction API)
+  ## ===========================================================
+  api:
+    build:
+      context: ./Services/FastAPI
+      dockerfile: Dockerfile
+    image: fastapi_service:latest
+    container_name: fastapi_api
+
+    env_file:
+      - .env          
+    environment:
+      - APP_PORT=8000   
+      - PYTHONPATH=/app
+
+    volumes:
+      - ./Services/FastAPI/src:/app/src:rw
+      - ./model:/app/model:rw
+      - ./metrics:/app/metrics:rw
+      - ./resources:/app/resources:rw
+
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
 ## ===========================================================
 ## NETWORK CONFIGURATION
 ## ===========================================================

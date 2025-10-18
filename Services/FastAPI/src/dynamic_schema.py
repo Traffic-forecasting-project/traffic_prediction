@@ -1,5 +1,6 @@
 '''
 __author__ = "Georges Nassopoulos"
+__contributors__ = "Mateo Villa Arias"
 __copyright__ = None
 __version__ = "1.0.0"
 __email__ = "georges.nassopoulos@gmail.com"
@@ -16,8 +17,8 @@ import joblib
 from pydantic import create_model, BaseModel
 from typing import Dict, Any
 
-from src.core.constants import MODEL_PATH
-from src.core.logging_utils import get_logger
+from src.constants import MODEL_PATH
+from src.logging_utils import get_logger
 
 ## JSON fallback path
 from pathlib import Path

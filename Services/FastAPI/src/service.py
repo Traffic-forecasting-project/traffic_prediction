@@ -1,5 +1,6 @@
 '''
 __author__ = "Georges Nassopoulos"
+__contributors__ = "Mateo Villa Arias"
 __copyright__ = None
 __version__ = "1.0.0"
 __email__ = "georges.nassopoulos@gmail.com"
@@ -50,13 +51,13 @@ except:
     from src.auth.roles import ROLE_ADMIN, ROLE_USER
 
     ## Import dynamic schema
-    from src.core.dynamic_schema import DynamicFeatures, load_feature_order
+    from src.dynamic_schema import DynamicFeatures, load_feature_order
 
     ## Logging utilities
-    from src.core.logging_utils import get_logger, log_execution_time_and_path
+    from src.logging_utils import get_logger, log_execution_time_and_path
 
     ## Project constants
-    from src.core.constants import (
+    from src.constants import (
         MODEL_PATH,
         ACCESS_TOKEN_EXPIRE_MINUTES,
         FAKE_USERS_DB
@@ -529,7 +530,7 @@ def run_fastapi_service_pipeline(
         ## Exclude the problematic 'logs' directory to avoid OSError on Windows
         exclude_dirs = ["logs", "venv", "test_win"]
         uvicorn.run(
-            "src.core.service:app",
+            "src.service:app",
             host="0.0.0.0",
             port=8000,
             reload=True,
@@ -548,7 +549,7 @@ if __name__ == "__main__":
     exclude_dirs = ["logs", "venv", "test_win"]
 
     uvicorn.run(
-        "src.core.service:app",
+        "src.service:app",
         host="0.0.0.0",
         port=8000,
         reload=True,

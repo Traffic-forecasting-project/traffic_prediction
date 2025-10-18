@@ -1,5 +1,6 @@
 '''
 __author__ = "Georges Nassopoulos"
+__contributors__ = "Mateo Villa Arias"
 __copyright__ = None
 __version__ = "1.0.0"
 __email__ = "georges.nassopoulos@gmail.com"
@@ -12,7 +13,7 @@ from fastapi import Depends, HTTPException, status
 
 from src.auth.jwt_auth import get_current_user
 from src.auth.roles import UserInDB
-from src.core.logging_utils import get_logger
+from src.logging_utils import get_logger
 
 ## ============================
 ## Setup logger

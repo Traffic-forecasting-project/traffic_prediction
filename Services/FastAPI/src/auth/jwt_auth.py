@@ -1,5 +1,6 @@
 '''
 __author__ = "Georges Nassopoulos"
+__contributors__ = "Mateo Villa Arias"
 __copyright__ = None
 __version__ = "1.0.0"
 __email__ = "georges.nassopoulos@gmail.com"
@@ -23,9 +24,9 @@ try:
         ACCESS_TOKEN_EXPIRE_MINUTES
     )
 except:
-    from src.core.logging_utils import get_logger
+    from src.logging_utils import get_logger
     from src.auth.roles import USERS_DB, UserInDB
-    from src.core.constants import (
+    from src.constants import (
         SECRET_KEY,
         ALGORITHM,
         ACCESS_TOKEN_EXPIRE_MINUTES
