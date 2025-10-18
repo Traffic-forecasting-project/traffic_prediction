@@ -90,7 +90,9 @@ app = FastAPI(
     version="1.0.0"
 )
 # Prometheus instrumentation (expose on /prometheus to avoid clashing with existing /metrics)
-Instrumentator().instrument(app).expose(app, endpoint="/prometheus", include_in_schema=False)
+instrumentator = Instrumentator().instrument(app)
+instrumentator.expose(app, endpoint="/prometheus", include_in_schema=False)
+instrumentator.excluded_handlers = ["/prometheus"]  # 👈 Exclude it from metrics
 
 ## ============================
 ## Authentication routes
