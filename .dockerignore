@@ -1,24 +1,3 @@
-# VCS & Python noise
-.git
-.gitignore
-__pycache__/
-*.py[cod]
-*.egg-info/
-.venv/
-venv/
-
-# DVC/cache
-.dvc/
-.dvcignore
-
-# Local artifacts
-logs/
-metrics/
-data/
-images/
-model/
-resources/
-
 # Node/Grafana caches
 monitoring/grafana/grafana.db
 monitoring/grafana/plugins/
@@ -30,6 +9,3 @@ monitoring/grafana/csv/
 monitoring/grafana/*
 !monitoring/grafana/dashboards/**
 !monitoring/grafana/datasources/**
-
-# Docker
-docker/*.log
