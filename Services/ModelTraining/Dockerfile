@@ -1,22 +1,41 @@
+# ==========================
+# Dockerfile for ModelTraining Service
+# Compatible with WSL2 and Linux (Airflow integration)
+# ==========================
+
+# Use a lightweight official Python base image
 FROM python:3.11-slim
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
+# Set environment variables for consistent Python behavior
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PYTHONPATH="/workspace:/workspace/Services/ModelTraining/src:/workspace/Services/utils:/workspace/Services"
+    PYTHONPATH="/opt/airflow:${PYTHONPATH}"
 
-WORKDIR /workspace
+# Define the working directory inside the container
+WORKDIR /opt/airflow
 
-# Dépendances système minimales
-RUN apt-get update && apt-get install -y --no-install-recommends build-essential \
+# Install essential system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git openssh-client ca-certificates bash tzdata \
     && rm -rf /var/lib/apt/lists/*
 
-# Installer les dépendances
-COPY requirements.txt /tmp/requirements.txt
-RUN pip install --upgrade pip && pip install -r /tmp/requirements.txt
+# Create required directories (to prevent "directory not found" errors)
+RUN mkdir -p /opt/airflow/data/live \
+    && mkdir -p /opt/airflow/data/raw \
+    && mkdir -p /opt/airflow/data/processed \
+    && chmod -R 777 /opt/airflow/data
 
-# Copier le code complet (y compris ModelTraining et utils)
-COPY . /workspace/
+# Copy the entire project into the container
+# Ensures all Services, data, utils, DAGs, and configs are available
+COPY . /opt/airflow/
 
-# Point d’entrée : entraîner un modèle
-CMD ["python", "Services/ModelTraining/src/train_model.py", "-s", "incident_analysis"]
+# Copy service-specific requirements file (explicit reference)
+COPY Services/ModelTraining/requirements.txt /tmp/requirements.txt
+
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r /tmp/requirements.txt
+
+# Default command to run the ModelTraining script
+CMD ["python", "/opt/airflow/Services/ModelTraining/src/model_training.py"]

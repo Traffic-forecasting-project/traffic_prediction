@@ -1,5 +1,5 @@
 ''' 
-__author__ = -
+__author__ = "Georges Nassopoulos"
 __copyright__ = None
 __version__ = "1.6.3"
 __email__ = "georges.nassopoulos@gmail.com"
@@ -11,19 +11,33 @@ import os
 import pandas as pd
 import numpy as np
 from sklearn.impute import SimpleImputer
-from Services.FastAPI.src.logging_utils import get_logger, log_execution_time_and_path
 
-from Services.FastAPI.src.constants import (
-    FILTER_STANDARD_INCIDENTS,
-    TARGET_METADATA,
-    ENABLE_EXTRA_FEATURES
-)
+## Imports for "microservice" et "legacy" structures respectively
+try:
+    from Services.FastAPI.src.logging_utils import get_logger, log_execution_time_and_path            
+    from Services.FastAPI.src.constants import (
+        FILTER_STANDARD_INCIDENTS,
+        TARGET_METADATA,
+        ENABLE_EXTRA_FEATURES
+    )
+    from Services.utils.utils import (
+        safe_eval,
+        clean_columns_and_rows,
+        load_and_merge_files
+    )
 
-from Services.utils.utils import (
-    safe_eval,
-    clean_columns_and_rows,
-    load_and_merge_files
-)
+except:
+    from src.core.logging_utils import get_logger, log_execution_time_and_path            
+    from src.core.constants import (
+        FILTER_STANDARD_INCIDENTS,
+        TARGET_METADATA,
+        ENABLE_EXTRA_FEATURES
+    )
+    from src.utils.utils import (
+        safe_eval,
+        clean_columns_and_rows,
+        load_and_merge_files
+    )
 
 logger = get_logger("prepare_data")
 
@@ -400,38 +414,45 @@ def create_features(df: pd.DataFrame, data_dir_output: str, strategy: str, targe
 
     return (df, feature_path)
 
-def run_prepare_data_pipeline(strategy: str | None = None,
-                              targets_input: list | str | None = None,
-                              data_dir_input: str | None = None,
-                              data_dir_output: str | None = None) -> None:
+def run_prepare_data_pipeline(
+    strategy: str = "incident_analysis",
+    targets_input: list[str] | None = None,
+    data_dir_input: str = os.path.join("data", "raw"),
+    data_dir_output: str = os.path.join("data", "processed")
+) -> None:
     """
         Run the prepare data (feature engineering) loop using the specified strategy.
-        If arguments are None / empty, fall back to environment variables:
 
+        Defaults:
+            - strategy: 'incident_analysis'
+            - data_dir_input: './data/raw'
+            - data_dir_output: './data/processed'
+
+        Environment fallback:
             DATAPREP_DEFAULT_STRATEGY
             DATAPREP_DEFAULT_INPUT_DIR
             DATAPREP_DEFAULT_OUTPUT_DIR
-            DATAPREP_DEFAULT_TARGETS (comma-separated)
-            DATAPREP_ENABLE_EXTRA_FEATURES (0/1 or true/false)
-
-        Args:
-            strategy (str|None)
-            targets_input (list|str|None)
-            data_dir_input (str|None)
-            data_dir_output (str|None)
+            DATAPREP_DEFAULT_TARGETS
     """
-    # Resolve env-based defaults
-    strategy = strategy or os.getenv("DATAPREP_DEFAULT_STRATEGY", "incident_analysis")
+    
+    ## Resolve env-based defaults    
+    strategy = os.getenv("DATAPREP_DEFAULT_STRATEGY", strategy)
+    data_dir_input = os.getenv("DATAPREP_DEFAULT_INPUT_DIR", data_dir_input)
+    data_dir_output = os.getenv("DATAPREP_DEFAULT_OUTPUT_DIR", data_dir_output)
 
+    if not os.path.isabs(data_dir_input):
+        data_dir_input = os.path.join(os.getcwd(), data_dir_input)
+    if not os.path.isabs(data_dir_output):
+        data_dir_output = os.path.join(os.getcwd(), data_dir_output)
 
     os.makedirs(data_dir_output, exist_ok=True)
 
-    # Targets: if list empty / blank string -> env
+    ## Targets: if list empty / blank string -> env
     if (not targets_input) or (isinstance(targets_input, str) and targets_input.strip() == ""):
         env_targets = os.getenv("DATAPREP_DEFAULT_TARGETS", "")
         targets_input = [t.strip() for t in env_targets.split(",") if t.strip()] or None
 
-    # Normalize relative paths (keep absolute as-is)
+    ## Normalize relative paths (keep absolute as-is)
     if not os.path.isabs(data_dir_input):
         data_dir_input = os.path.join(os.getcwd(), data_dir_input)
     if not os.path.isabs(data_dir_output):
@@ -442,7 +463,7 @@ def run_prepare_data_pipeline(strategy: str | None = None,
 
     logger.info(f"[DataPrep Config] strategy={strategy} input={data_dir_input} output={data_dir_output} targets={targets_input}")
 
-    # Optional override for extra features
+    ## Optional override for extra features
     extra_flag = os.getenv("DATAPREP_ENABLE_EXTRA_FEATURES")
     if extra_flag:
         enabled = str(extra_flag).lower() in ("1", "true", "yes", "on")

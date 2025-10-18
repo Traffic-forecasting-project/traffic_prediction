@@ -11,7 +11,7 @@ __desc__ = Global constants for live data collection and model pipeline
 import os
 from dotenv import load_dotenv
 from typing import List
-
+from pathlib import Path
 ## Load environment variables from .env file
 load_dotenv()
 
@@ -26,13 +26,14 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 ## BASE DIRECTORIES
 ## ========================
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
-DATA_DIR = "data"
-MODELS_DIR = "model"
-EDA_OUTPUT_DIR = "eda"
+DATA_DIR = os.path.join(BASE_DIR, "data")
+EDA_OUTPUT_DIR = os.path.join(BASE_DIR, "eda")
 RAW_DATA_DIR = os.path.join(DATA_DIR, "raw")
 LIVE_DATA_DIR = os.path.join(DATA_DIR, "live")
 PROCESSED_DATA_DIR = os.path.join(DATA_DIR, "processed")
-RESOURCES_DIR = "ressources"
+RESOURCES_DIR = os.path.join(BASE_DIR, "resources")
+MODEL_DIR = Path(os.getenv("MODEL_DIR", "/app/model"))
+
 
 ## ========================
 ## AUTHORIZATION DUMMY USERS
@@ -60,9 +61,9 @@ FAKE_USERS_DB = {
 ## ========================
 ARRONDISSEMENTS_PATH = os.path.join(DATA_DIR, "arrondissements.csv")
 CSV_PATH = os.path.join(LIVE_DATA_DIR, "live_data.csv")
-TOP_FEATURES_FILE = os.path.join(MODELS_DIR, "feature_importances.json" )
-MODEL_PATH = os.path.join(MODELS_DIR, "model_incident_analysis_incident_duration_min.joblib" )
-
+TOP_FEATURES_FILE = os.path.join(MODEL_DIR, "feature_importances.json" )
+MODEL_FILENAME = os.getenv("MODEL_FILENAME", "model_incident_analysis_incident_duration_min.joblib")
+MODEL_PATH = str(MODEL_DIR / MODEL_FILENAME)
 ## ========================
 ## API KEYS
 ## ========================

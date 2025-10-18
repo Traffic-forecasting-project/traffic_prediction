@@ -7,35 +7,39 @@ __status__ = "Dev"
 __desc__ = Utility functions for live data collection
 '''
 
-
+import os
 import sys
 import time
 import requests
 import json
-import ast
 import logging
 import pandas as pd
-from shapely.geometry import shape
+import datetime
+from zoneinfo import ZoneInfo
+import random
 
-from Services.FastAPI.src.constants import MAX_CALLS_PER_DAY, CALL_DELAY_SECONDS, WEATHER_KEY, TOMTOM_KEY
+# Import constants and logger based on project structure
+try:
+    from Services.FastAPI.src.constants import STRATEGY, MAX_CALLS_PER_DAY, CALL_DELAY_SECONDS, WEATHER_KEY, TOMTOM_KEY, SAMPLE_ALL_INCIDENT_POINTS
+except:
+    from src.core.constants import STRATEGY, MAX_CALLS_PER_DAY, CALL_DELAY_SECONDS, WEATHER_KEY, TOMTOM_KEY, SAMPLE_ALL_INCIDENT_POINTS
 
-
-calls_today = 0 ## Global variable that tracks how many API calls were made today
+calls_today = 0  ## Global variable that tracks how many API calls were made today
 last_weather_time = None
 last_weather_data = None
 
-## ========================
-## Basic utilities
-## ========================
+# ========================
+# Basic utilities
+# ========================
 def convert_to_local_timezone(api_time):
     """
-    Convert a UTC time string from an API to Paris local timezone.
+        Convert a UTC time string from an API to Paris local timezone
 
-    Args:
-        api_time (str): ISO-format UTC time string (e.g., '2023-01-01T12:00:00Z')
+        Args:
+            api_time (str): ISO-format UTC time string (e.g., '2023-01-01T12:00:00Z')
 
-    Returns:
-        datetime.datetime: Datetime object converted to Europe/Paris timezone
+        Returns:
+            datetime.datetime: Datetime object converted to Europe/Paris timezone
     """
     if api_time is None:
         return api_time
@@ -46,7 +50,6 @@ def convert_to_local_timezone(api_time):
     ## Convert to Paris timezone
     dt_paris = time_utc.astimezone(ZoneInfo("Europe/Paris"))
     return dt_paris
-
 
 def save_csv(df_row, arrondissement, strategy):
     """
@@ -90,28 +93,30 @@ def save_csv(df_row, arrondissement, strategy):
     df_row = df_row[[col for col in ordered_columns if col in df_row.columns]]
 
     ## Append row
-    df_row.to_csv(output_file, mode='a', index=False, header=header, encoding='utf-8-sig')
-    
+    df_row.to_csv(output_file, mode='a', index=False,
+                  header=header, encoding='utf-8-sig')
+
 def safe_request(url: str, params: dict) -> requests.Response:
     """
-    Make a safe API request with retry protection, logging, and call counting.
+        Make a safe API request with retry protection, logging, and call counting
 
-    Args:
-        url (str): The API endpoint URL.
-        params (dict): Parameters to include in the API request.
+        Args:
+            url (str): The API endpoint URL
+            params (dict): Parameters to include in the API request
 
-    Returns:
-        requests.Response: The response object from the API.
+        Returns:
+            requests.Response: The response object from the API
 
-    Raises:
-        SystemExit: Exits the program if any request error occurs.
+        Raises:
+            SystemExit: Exits the program if any request error occurs
     """
-    
+
     global calls_today
 
     ## Check if daily limit has been reached
     if calls_today >= MAX_CALLS_PER_DAY:
-        logging.error(f"Max daily API calls reached ({calls_today}/{MAX_CALLS_PER_DAY}). Exiting.")
+        logging.error(
+            f"Max daily API calls reached ({calls_today}/{MAX_CALLS_PER_DAY}). Exiting.")
         sys.exit(1)
 
     ## Respect API rate limit with delay
@@ -137,20 +142,21 @@ def safe_request(url: str, params: dict) -> requests.Response:
         logging.error(f"Request failed: {err}. Exiting.")
         sys.exit(1)
 
-## ========================
-## API Call utilities
-## ========================
+# ========================
+# API Call utilities
+# ========================
 def get_weather(lat, lon):
     """
-    Retrieves current weather data from OpenWeatherMap API for a given location.
+        Retrieves current weather data from OpenWeatherMap API for a given location
 
-    Args:
-        lat (float): Latitude of the location.
-        lon (float): Longitude of the location.
+        Args:
+            lat (float): Latitude of the location
+            lon (float): Longitude of the location
 
-    Returns:
-        dict: Dictionary containing temperature, wind speed, and rain volume (if available).
+        Returns:
+            dict: Dictionary containing temperature, wind speed, and rain volume (if available)
     """
+    
     ## OpenWeatherMap endpoint
     url = "https://api.openweathermap.org/data/2.5/weather"
 
@@ -179,15 +185,16 @@ def get_weather(lat, lon):
 
 def get_traffic_flow(lat, lon):
     """
-    Retrieves real-time traffic flow data from the TomTom Traffic API for a specific location.
+        Retrieves real-time traffic flow data from the TomTom Traffic API for a specific location
 
-    Args:
-        lat (float): Latitude of the point.
-        lon (float): Longitude of the point.
+        Args:
+            lat (float): Latitude of the point
+            lon (float): Longitude of the point
 
-    Returns:
-        dict: Dictionary containing average speed, free-flow speed, and jam factor.
+        Returns:
+            dict: Dictionary containing average speed, free-flow speed, and jam factor
     """
+
     ## TomTom Traffic Flow API endpoint
     url = "https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json"
 
@@ -208,7 +215,8 @@ def get_traffic_flow(lat, lon):
     avg_speed = flow_data.get("currentSpeed")
     free_flow_speed = flow_data.get("freeFlowSpeed")
     jam_factor = (
-        flow_data.get("currentTravelTime") / flow_data.get("freeFlowTravelTime")
+        flow_data.get("currentTravelTime") /
+        flow_data.get("freeFlowTravelTime")
         if flow_data.get("freeFlowTravelTime") and flow_data.get("currentTravelTime")
         else None
     )
@@ -221,23 +229,25 @@ def get_traffic_flow(lat, lon):
 
 def get_incidents(lat1, lon1, lat2, lon2):
     """
-    Fetches incident data from TomTom API within a specified bounding box.
+        Fetches incident data from TomTom API within a specified bounding box
 
-    Args:
-        lat1 (float): Southern latitude of the bounding box.
-        lon1 (float): Western longitude of the bounding box.
-        lat2 (float): Northern latitude of the bounding box.
-        lon2 (float): Eastern longitude of the bounding box.
+            Args:
+                lat1 (float): Southern latitude of the bounding box
+                lon1 (float): Western longitude of the bounding box
+                lat2 (float): Northern latitude of the bounding box
+                lon2 (float): Eastern longitude of the bounding box
 
-    Returns:
-        List[dict]: List of cleaned incident dictionaries containing metadata and coordinates.
+            Returns:
+                List[dict]: List of cleaned incident dictionaries containing metadata and coordinates
     """
+
     url = "https://api.tomtom.com/traffic/services/5/incidentDetails"
 
     params = {
         "key": TOMTOM_KEY,
         "bbox": f"{lon1},{lat1},{lon2},{lat2}",
-        "fields": "{incidents{type,geometry{type,coordinates},properties{...}}}",  ## Long query structure
+        # Long query structure
+        "fields": "{incidents{type,geometry{type,coordinates},properties{id,iconCategory,magnitudeOfDelay,events{description,code,iconCategory},startTime,endTime,from,to,length,delay,roadNumbers,timeValidity,probabilityOfOccurrence,numberOfReports,lastReportTime,tmc{countryCode,tableNumber,tableVersion,direction,points{location,offset}}}}}",
         "language": "en-GB",
         "timeValidityFilter": "present"
     }
@@ -303,17 +313,17 @@ def get_incidents(lat1, lon1, lat2, lon2):
 
 def get_incidents_per_coordinate(lat1, lon1, lat2, lon2, ts=None):
     """
-    [DEPRECATED] Retrieve granular incident data from TomTom API,
-    returning one row per coordinate involved in the incident geometry.
+        [DEPRECATED] Retrieve granular incident data from TomTom API,
+        returning one row per coordinate involved in the incident geometry
 
-    Args:
-        lat1 (float): Minimum latitude of the bounding box.
-        lon1 (float): Minimum longitude of the bounding box.
-        lat2 (float): Maximum latitude of the bounding box.
-        lon2 (float): Maximum longitude of the bounding box.
+        Args:
+            lat1 (float): Minimum latitude of the bounding box
+            lon1 (float): Minimum longitude of the bounding box
+            lat2 (float): Maximum latitude of the bounding box
+            lon2 (float): Maximum longitude of the bounding box
 
-    Returns:
-        list of dict: One entry per coordinate with detailed incident properties.
+        Returns:
+            list of dict: One entry per coordinate with detailed incident properties
     """
 
     url = "https://api.tomtom.com/traffic/services/5/incidentDetails"
@@ -377,42 +387,44 @@ def get_incidents_per_coordinate(lat1, lon1, lat2, lon2, ts=None):
     logging.info(f"Number of incident coordinates found: {len(result_rows)}")
     return result_rows
 
-
-## ========================
-## Coordinate utilities
-## ========================
+# ========================
+# Coordinate utilities
+# ========================
 def load_arrondissement_data(path: str) -> dict:
     """
-    [DEPRECATED] Load polygon definitions for each Paris arrondissement from a CSV file.
+        [DEPRECATED] Load polygon definitions for each Paris arrondissement from a CSV file
 
-    Args:
-        path (str): Path to the CSV file containing 'arrondissement' and 'polygon' columns.
+        Args:
+            path (str): Path to the CSV file containing 'arrondissement' and 'polygon' columns
 
-    Returns:
-        dict: Dictionary mapping arrondissement numbers to lists of [lon, lat] points.
+        Returns:
+            dict: Dictionary mapping arrondissement numbers to lists of [lon, lat] points
     """
+
     ## Read CSV containing arrondissement and polygon columns
     df = pd.read_csv(path)
     arrondissement_polygons = {}
 
     ## Iterate over rows to extract polygon data
     for _, row in df.iterrows():
-        arr = int(row["arrondissement"])  ## Convert arrondissement to int
-        points = json.loads(row["polygon"])  ## Parse polygon string into list of points
-        arrondissement_polygons[arr] = points  ## Store mapping in dictionary
+        arr = int(row["arrondissement"])  # Convert arrondissement to int
+        ## Parse polygon string into list of points
+        points = json.loads(row["polygon"])
+        arrondissement_polygons[arr] = points  # Store mapping in dictionary
 
     return arrondissement_polygons
 
 def load_arrondissement_polygons(path):
     """
-    Loads the polygon coordinates of each Paris arrondissement from a CSV file.
+        Loads the polygon coordinates of each Paris arrondissement from a CSV file
 
-    Args:
-        path (str): Path to the CSV file containing arrondissement boundaries.
+        Args:
+            path (str): Path to the CSV file containing arrondissement boundaries
 
-    Returns:
-        dict: A dictionary mapping arrondissement number to its polygon coordinates.
+        Returns:
+            dict: A dictionary mapping arrondissement number to its polygon coordinates
     """
+
     ## Load the CSV containing arrondissement numbers and their coordinates
     df = pd.read_csv(path)
 
@@ -436,33 +448,34 @@ def load_arrondissement_polygons(path):
 def extract_point_list_from_geometry(geometry_str: str) -> list:
     """
         Convert a GeoJSON-like geometry string into a list of [lon, lat] coordinates
-        
+
         Args:
             geometry_str (str): A string representation of the geometry (e.g., GeoJSON Polygon)
-        
+
         Returns:
             list: A list of [lon, lat] coordinate pairs
     """
-    
+
     try:
         geometry = json.loads(geometry_str)
-        return geometry.get("coordinates", [])[0]  # Assuming a single polygon
+        return geometry.get("coordinates", [])[0]  ## Assuming a single polygon
     except Exception as e:
         logging.warning(f"Could not parse geometry: {e}")
         return []
 
 def point_inside_polygon(x, y, polygon):
     """
-    Check whether a point is inside a polygon using the ray casting algorithm.
+        Check whether a point is inside a polygon using the ray casting algorithm
 
-    Args:
-        x (float): Longitude of the point.
-        y (float): Latitude of the point.
-        polygon (list): List of [lon, lat] pairs defining the polygon.
+        Args:
+            x (float): Longitude of the point
+            y (float): Latitude of the point
+            polygon (list): List of [lon, lat] pairs defining the polygon
 
-    Returns:
-        bool: True if the point is inside the polygon, otherwise False.
+        Returns:
+            bool: True if the point is inside the polygon, otherwise False
     """
+
     n = len(polygon)
     inside = False
 
@@ -471,7 +484,7 @@ def point_inside_polygon(x, y, polygon):
 
     ## Iterate over each edge in the polygon
     for i in range(n + 1):
-        p2x, p2y = polygon[i % n]  ## Loop back to the start at the end
+        p2x, p2y = polygon[i % n]  # Loop back to the start at the end
 
         ## Check if the horizontal ray crosses the edge vertically
         if y > min(p1y, p2y):
@@ -480,7 +493,8 @@ def point_inside_polygon(x, y, polygon):
 
                     ## Compute the x-intersection with the edge
                     if p1y != p2y:
-                        xinters = ((y - p1y) * (p2x - p1x)) / (p2y - p1y + 1e-9) + p1x
+                        xinters = ((y - p1y) * (p2x - p1x)) / \
+                            (p2y - p1y + 1e-9) + p1x
                     else:
                         xinters = p1x
 
@@ -495,15 +509,16 @@ def point_inside_polygon(x, y, polygon):
 
 def get_coordinates(polygon, nb_points):
     """
-    Generate random coordinates that lie within a given polygon.
+        Generate random coordinates that lie within a given polygon
 
-    Args:
-        polygon (list): List of [lon, lat] pairs forming the polygon boundary.
-        nb_points (int): Number of valid random points to generate inside the polygon.
+        Args:
+            polygon (list): List of [lon, lat] pairs forming the polygon boundary
+            nb_points (int): Number of valid random points to generate inside the polygon
 
-    Returns:
-        list: List of (lon, lat) tuples contained in the polygon.
+        Returns:
+            list: List of (lon, lat) tuples contained in the polygon
     """
+
     ## Compute bounding box around the polygon
     longitudes = [p[0] for p in polygon]
     latitudes = [p[1] for p in polygon]
@@ -523,20 +538,19 @@ def get_coordinates(polygon, nb_points):
 
     return coordinates
 
-
 def split_bbox(lat1, lon1, lat2, lon2, count):
     """
-    Split a bounding box into smaller sub-bounding boxes.
+        Split a bounding box into smaller sub-bounding boxes
 
-    Args:
-        lat1 (float): South latitude of the original bbox.
-        lon1 (float): West longitude of the original bbox.
-        lat2 (float): North latitude of the original bbox.
-        lon2 (float): East longitude of the original bbox.
-        count (int): Number of parts to split each side into (1 = no split).
+        Args:
+            lat1 (float): South latitude of the original bbox
+            lon1 (float): West longitude of the original bbox
+            lat2 (float): North latitude of the original bbox
+            lon2 (float): East longitude of the original bbox
+            count (int): Number of parts to split each side into (1 = no split)
 
-    Returns:
-        list: List of sub-bounding boxes as (lat1, lon1, lat2, lon2) tuples.
+        Returns:
+            list: List of sub-bounding boxes as (lat1, lon1, lat2, lon2) tuples
     """
 
     ## If no split is requested, return the full bounding box
@@ -560,16 +574,15 @@ def split_bbox(lat1, lon1, lat2, lon2, count):
 
     return bboxes
 
-
 def get_bbox_from_coords(coords):
     """
-    Get the bounding box (min/max lat/lon) from a list of coordinates.
+        Get the bounding box (min/max lat/lon) from a list of coordinates
 
-    Args:
-        coords (list): List of [lon, lat] pairs.
+        Args:
+            coords (list): List of [lon, lat] pairs
 
-    Returns:
-        tuple: (min_lat, min_lon, max_lat, max_lon)
+        Returns:
+            tuple: (min_lat, min_lon, max_lat, max_lon)
     """
 
     ## Extract all longitude and latitude values from the coordinate list

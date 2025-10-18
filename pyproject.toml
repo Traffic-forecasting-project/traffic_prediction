@@ -1,0 +1,10 @@
+[project]
+name = "MLOps Project - Traffic Accident Prediction"
+version = "0.1.0"
+requires-python = ">=3.11,<3.12"
+
+authors = [
+  { name = "Georges Nassopoulos" },
+  { name = "Mateo Villa Arias" },
+  { name = "Karim Elqounss" }
+]

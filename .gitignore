@@ -1,10 +1,39 @@
-/model_stats.csv
+## === Python cache & compiled files ===
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+## === Environment & config ===
+.env
+*.ini
+*.cfg
+
+## === Data files ===
+*.csv
+*.json
+*.joblib
+*.pkl
+
+## === Project-specific folders ===
+/logs
+/mlruns
+/metrics
+/eda
 /exports
 /models
-/live
-"__pycache__/\n*.pyc\n.env\n*.csv\n*.json\n*.joblib\n*.pkl\nlogs/\nmlruns/\nmetrics/\narbo_check*.txt\narborescence.txt\neda/" 
--e "arbo_check*.txt\narborescence.txt\n*.csv\n*.json\n*.joblib\n*.pkl\nlogs/\nmlruns/\neda/\n__pycache__/" 
-/mlruns
-/logs
 /model
-/eda
+/live
+
+## === Temporary & generated files ===
+arbo_check*.txt
+arborescence.txt
+/model_stats.csv
+
+## === OS & IDE files ===
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+# venv
+.venv

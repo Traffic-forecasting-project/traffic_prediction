@@ -1,6 +1,12 @@
-## ============================
-## Imports
-## ============================
+'''
+__author__ = "Georges Nassopoulos"
+__copyright__ = None
+__version__ = "1.0.0"
+__email__ = "georges.nassopoulos@gmail.com"
+__status__ = "Dev"
+__desc__ = "FastAPI service exposing prediction endpoints for incident_duration_min with JWT authentication."
+'''
+
 import uvicorn
 import joblib
 import pandas as pd
@@ -12,25 +18,49 @@ import csv
 import numpy as np
 import os
 import json
+import sys
 from pathlib import Path
 
-## Authentication and authorization
-from src.auth.jwt_auth import create_access_token
-from src.auth.dependencies import RoleChecker
-from src.auth.roles import ROLE_ADMIN, ROLE_USER
+## Imports for "microservice" et "legacy" structures respectively
+try:
+ 
+    ## Authentication and authorization
+    from Services.FastAPI.src.auth.jwt_auth import create_access_token
+    from Services.FastAPI.src.auth.dependencies import RoleChecker
+    from Services.FastAPI.src.auth.roles import ROLE_ADMIN, ROLE_USER
 
-## Import dynamic schema
-from src.core.dynamic_schema import DynamicFeatures, load_feature_order
+    ## Import dynamic schema
+    from Services.FastAPI.src.dynamic_schema import DynamicFeatures, load_feature_order
 
-## Logging utilities
-from src.core.logging_utils import get_logger, log_execution_time_and_path
+    ## Logging utilities
+    from Services.FastAPI.src.logging_utils import get_logger, log_execution_time_and_path
 
-## Project constants
-from src.core.constants import (
-    MODEL_PATH,
-    ACCESS_TOKEN_EXPIRE_MINUTES,
-    FAKE_USERS_DB
-)
+    ## Project constants
+    from Services.FastAPI.src.constants import (
+        MODEL_PATH,
+        ACCESS_TOKEN_EXPIRE_MINUTES,
+        FAKE_USERS_DB
+    )
+
+except:
+
+    ## Authentication and authorization
+    from src.auth.jwt_auth import create_access_token
+    from src.auth.dependencies import RoleChecker
+    from src.auth.roles import ROLE_ADMIN, ROLE_USER
+
+    ## Import dynamic schema
+    from src.core.dynamic_schema import DynamicFeatures, load_feature_order
+
+    ## Logging utilities
+    from src.core.logging_utils import get_logger, log_execution_time_and_path
+
+    ## Project constants
+    from src.core.constants import (
+        MODEL_PATH,
+        ACCESS_TOKEN_EXPIRE_MINUTES,
+        FAKE_USERS_DB
+    )
 
 ## ============================
 ## Setup logger
@@ -43,6 +73,10 @@ logger = get_logger(__name__)
 model = None         # Holds the trained ML model
 FEATURE_ORDER = []   # Stores expected feature order
 FEATURE_FILE = Path("resources/feature_importances.json")  # Fallback file for features
+
+## MODEL_PATH is now safe and works everywhere
+MODEL_PATH = MODEL_PATH.replace("Services\\", "")
+MODEL_PATH = MODEL_PATH.replace("Services/", "")
 
 ## ============================
 ## FastAPI app initialization
@@ -259,8 +293,18 @@ def predict(
 
         ## Load model (idempotent for tests; could be cached in prod)
         logger.info(f"Loading model from: {MODEL_PATH}")
-        mdl = joblib.load(MODEL_PATH)
 
+        try:
+            mdl = joblib.load(MODEL_PATH)
+            logger.info("Model successfully loaded from %s", os.path.abspath(MODEL_PATH))
+        except (EOFError, OSError, FileNotFoundError) as e:
+            logger.error(f"Failed to load model from {MODEL_PATH}: {e}")
+            logger.error("The model file may be missing, empty, or corrupted. Please retrain it.")
+            sys.exit(1)
+        except Exception as e:
+            logger.exception(f"Unexpected error while loading model from {MODEL_PATH}: {e}")
+            sys.exit(1)
+        
         ## Determine feature order (from model or JSON fallback)
         feature_order = []
         if hasattr(mdl, "feature_names_in_"):
@@ -298,6 +342,98 @@ def predict(
         logger.error(f"Prediction failed: {e}")
         raise HTTPException(status_code=500, detail="Prediction failed")
 
+@app.post("/batch-predict", summary="Predict incident_duration_min for multiple samples")
+def batch_predict(
+    input_list: list[DynamicFeatures],
+    current_user=Depends(RoleChecker([ROLE_ADMIN, ROLE_USER]))
+):
+    """
+        Predict multiple incident durations in batch mode
+
+        This endpoint processes a list of prediction requests, each following the DynamicFeatures schema, 
+        and returns all predictions in a single response
+
+        Args:
+            input_list (list[DynamicFeatures]): List of payloads containing
+                feature values for each sample
+            current_user: Authenticated user (admin or user role)
+
+        Returns:
+            dict: JSON object containing a list of predictions
+                Example:
+                {
+                    "predictions": [
+                        {"sample_id": 1, "predicted_incident_duration_min": 3.72},
+                        {"sample_id": 2, "predicted_incident_duration_min": 5.48}
+                    ]
+                }
+
+        Raises:
+            HTTPException(400): If input list is empty
+            HTTPException(500): If preprocessing or prediction fails
+            HTTPException(503): If the model is not available
+    """
+
+    ## Log the username for traceability
+    logger.info(f"Received batch prediction request from user: {current_user.username}")
+
+    ## Check if input is empty to avoid silent failure
+    if not input_list:
+        logger.warning("Empty input list for batch prediction.")
+        raise HTTPException(status_code=400, detail="Input list cannot be empty.")
+
+    ## Check that the model file exists before prediction
+    if not os.path.exists(MODEL_PATH):
+        logger.error(f"Model file not found at {MODEL_PATH}")
+        raise HTTPException(
+            status_code=503,
+            detail="Model not available. Train the model before prediction."
+        )
+
+    try:
+        ## Load the trained model
+        mdl = joblib.load(MODEL_PATH)
+
+        ## Get the feature order (from model or JSON fallback)
+        feature_order = list(mdl.feature_names_in_) if hasattr(mdl, "feature_names_in_") else load_feature_order()
+
+        ## Validate that the feature order is not empty
+        if not feature_order:
+            logger.error("Model feature order missing and JSON fallback unavailable.")
+            raise HTTPException(status_code=500, detail="Model feature order missing.")
+
+        ## Convert each request object to a DataFrame row
+        df_list = [build_full_feature_vector(item, feature_order) for item in input_list]
+
+        ## Concatenate all rows into one batch DataFrame
+        features_df = pd.concat(df_list, ignore_index=True)
+
+        ## Debug print: display first few rows of the DataFrame
+        logger.debug(f"Batch features DataFrame:\n{features_df.head()}")
+
+        ## Perform predictions
+        preds = mdl.predict(features_df)
+
+        ## Build structured JSON results
+        results = [
+            {"sample_id": i + 1, "predicted_incident_duration_min": round(float(p), 2)}
+            for i, p in enumerate(preds)
+        ]
+
+        ## Log the successful completion of the batch
+        logger.info(f"Batch prediction completed successfully for {len(results)} samples.")
+
+        ## Return predictions to client
+        return {"predictions": results}
+
+    except HTTPException:
+        ## Let HTTPExceptions propagate (already well formatted)
+        raise
+    except Exception as e:
+        ## Capture unexpected exceptions and log them
+        logger.exception(f"Batch prediction failed: {e}")
+        raise HTTPException(status_code=500, detail="Batch prediction failed.")
+
 ## ============================
 ## Metrics endpoint
 ## ============================
@@ -332,19 +468,41 @@ async def get_metrics(current_user=Depends(RoleChecker([ROLE_ADMIN]))):
 ## ============================
 ## Run pipeline function
 ## ============================
-def run_fastapi_service_pipeline(reload: bool = False) -> None:
+def run_fastapi_service_pipeline(
+    reload: bool = False,
+    model_dir: str = os.path.join(".", "model"),
+    model_filename: str = "model_incident_analysis_incident_duration_min.joblib"
+) -> None:
     """
-        Load model, prepare feature order (and persist), and launch FastAPI app
+        Load model, prepare feature order, and launch FastAPI app
 
         Args:
             reload (bool): If True, runs uvicorn in reload mode for development
+            model_dir (str): Directory containing the trained model. Defaults to "./model"
+            model_filename (str): Model filename to load. Defaults to the incident_analysis model
     """
-    
+
     global model, FEATURE_ORDER
 
-    ## Load model (required to start in serving mode)
-    logger.info(f"Loading model from {MODEL_PATH}")
-    model = joblib.load(MODEL_PATH)
+    ## Build full model path dynamically
+    model_path = os.path.join(model_dir, model_filename)
+    logger.info(f"Loading model from {os.path.abspath(model_path)}")
+
+    ## Load the model file
+    if not os.path.exists(model_path):
+        logger.error(f"Model file not found: {model_path}")
+        raise FileNotFoundError(f"Model file not found at {model_path}")
+
+    try:
+        model = joblib.load(model_path)
+        logger.info("Model successfully loaded from %s", os.path.abspath(model_path))
+    except (EOFError, OSError, FileNotFoundError) as e:
+        logger.error(f"Failed to load model from {model_path}: {e}")
+        logger.error("The model file may be missing, empty, or corrupted. Please retrain it.")
+        sys.exit(1)
+    except Exception as e:
+        logger.exception(f"Unexpected error while loading model from {model_path}: {e}")
+        sys.exit(1)
 
     ## Load features from model or JSON fallback
     try:
@@ -365,10 +523,17 @@ def run_fastapi_service_pipeline(reload: bool = False) -> None:
         logger.error(f"Failed to initialize feature order: {e}")
         raise SystemExit(1)
 
-    ## Start server
+    ## Start the FastAPI server
     if reload:
-        ## Referencing by module path lets uvicorn auto-reload properly
-        uvicorn.run("src.core.service:app", host="0.0.0.0", port=8000, reload=True)
+        ## Exclude the problematic 'logs' directory to avoid OSError on Windows
+        exclude_dirs = ["logs", "venv", "test_win"]
+        uvicorn.run(
+            "src.core.service:app",
+            host="0.0.0.0",
+            port=8000,
+            reload=True,
+            reload_excludes=exclude_dirs,  ## prevent watching log folders
+        )
     else:
         uvicorn.run(app, host="0.0.0.0", port=8000)
 
@@ -376,5 +541,15 @@ def run_fastapi_service_pipeline(reload: bool = False) -> None:
 ## Local execution for debugging
 ## ============================
 if __name__ == "__main__":
-    ## When running this file directly, enable code reload for dev convenience
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+    """
+        Allow direct execution with autoreload for development.
+    """
+    exclude_dirs = ["logs", "venv", "test_win"]
+
+    uvicorn.run(
+        "src.core.service:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        reload_excludes=exclude_dirs,  ## ignore logs to avoid WinError
+    )

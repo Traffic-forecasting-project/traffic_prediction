@@ -17,8 +17,13 @@ import requests
 import datetime
 from zoneinfo import ZoneInfo
 
-from Services.FastAPI.src.constants import STRATEGY, MAX_CALLS_PER_DAY, CALL_DELAY_SECONDS
-from Services.FastAPI.src.logging_utils import get_logger, log_execution_time_and_path
+## Import constants and logger based on project structure
+try:
+    from Services.FastAPI.src.constants import STRATEGY, MAX_CALLS_PER_DAY, CALL_DELAY_SECONDS
+    from Services.FastAPI.src.logging_utils import get_logger, log_execution_time_and_path
+except:
+    from src.core.constants import STRATEGY, MAX_CALLS_PER_DAY, CALL_DELAY_SECONDS
+    from src.core.logging_utils import get_logger, log_execution_time_and_path
 
 calls_today = 0  ## Counter for total API calls (weather)
 last_weather_time = None  ## Last time weather was fetched
@@ -104,7 +109,6 @@ def save_csv(df_row, arrondissement, strategy):
         logger.warning("Unknown strategy, column order not enforced.")
         ordered_columns = df_row.columns.tolist()
 
-    #TODO :
     ## Determine output file based on strategy
     output_file = f"data/live/live_data_{STRATEGY}.{arrondissement}.csv"
 
@@ -151,22 +155,6 @@ def load_and_merge_files(strategy: str, data_dir: str) -> pd.DataFrame:
 
     ## Concatenate all loaded DataFrames into one
     return pd.concat(dfs, ignore_index=True)
-
-    # ## Build the glob pattern to match all CSV files related to the strategy
-    # pattern = os.path.join(data_dir, f"live_data_{strategy}.*.csv")
-    
-    # ## Find all files matching the pattern and rase an error if no files found
-    # file_list = glob.glob(pattern)
-    # if not file_list:
-        # raise FileNotFoundError(f"No files found for strategy '{strategy}' in {data_dir}")
-    
-    # ## Read all CSV files into separate DataFrames, concatenate and drop duplicate rows
-    # dfs = [pd.read_csv(f, low_memory=False) for f in file_list]
-    # df = pd.concat(dfs, ignore_index=True).drop_duplicates()
-    
-    # logger.info(f"Loaded {len(df)} rows from {len(file_list)} file(s) for strategy '{strategy}'")
-    
-    # return df
 
 def clean_columns_and_rows(df: pd.DataFrame, threshold: float = 0.9) -> pd.DataFrame:
     """

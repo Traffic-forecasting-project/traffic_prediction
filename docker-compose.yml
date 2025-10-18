@@ -1,140 +1,148 @@
 version: "3.9"
 
 services:
-  airflow-init:
-    build: ./Services/Airflow
-    # command: bash -c "airflow db init"
-    command: bash -c "airflow db init && \
-                  airflow users create --username admin \
-                                        --firstname Admin \
-                                        --lastname User \
-                                        --role Admin \
-                                        --email admin@example.com \
-                                        --password admin"
-    volumes:
-      - ./dags:/opt/airflow/dags
-      - airflow_db:/opt/airflow      
-      - airflow_logs:/opt/airflow/logs
-    env_file:
-      - .env
-    environment:
-      - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
-      - AIRFLOW_CONN_FS_PROJECT=${AIRFLOW_CONN_FS_PROJECT}
-      - PYTHONPATH=/workspace
-    networks:
-      - net
-    restart: "no"
+  ## ===========================================================
+  ## MAIN SERVICE: Airflow (orchestrator and scheduler)
+  ## ===========================================================
+  airflow:
+    build:
+      context: ./Services/Airflow                ## Build context for Airflow image
+      dockerfile: Dockerfile                     ## Dockerfile location
+      args:
+        APP_INPUTDIR: ${APP_INPUTDIR:-${PWD:-%cd%}}  ## Default build argument for input directory
 
-  airflow-webserver:
-    build: ./Services/Airflow
-    command: webserver
-    user: "0:0"
-    env_file:
-      - .env
+    container_name: airflow                      ## Container name
+    user: "0:0"                                  ## Run as root (needed for WSL file access)
+
+    environment:
+      - APP_INPUTDIR=${APP_INPUTDIR:-${PWD:-%cd%}}  ## Input directory variable
+      - DATA_PATH=data                              ## Path for data inside container
+      - AIRFLOW__CORE__EXECUTOR=SequentialExecutor   ## SequentialExecutor for simplicity
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False           ## Disable example DAGs
+      - AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/dags ## DAG folder path
+      - AIRFLOW__CORE__BASE_LOG_FOLDER=/opt/airflow/logs  ## Log folder path
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////opt/airflow/airflow.db  ## SQLite database
+      - PYTHONPATH=/opt/airflow                     ## Add Airflow directory to PYTHONPATH
+      - _AIRFLOW_WWW_WORKERS=2                      ## Number of Gunicorn workers
+      - _AIRFLOW_WEBSERVER_STARTUP_TIMEOUT=300      ## Webserver startup timeout
+      - HOST_ROOT=${HOST_ROOT:-${PWD}}              ## Absolut path of the code folder
+    volumes:
+      - ./dags:/opt/airflow/dags           ## Mount DAGs
+      - ./logs:/opt/airflow/logs           ## Mount logs
+      - ./Services:/opt/airflow/Services   ## Mount shared service code
+      - ./data:/opt/airflow/data           ## Mount data directory (critical for data access)
+      - ./model:/opt/airflow/model         ## Mount model directory
+      - /var/run/docker.sock:/var/run/docker.sock  ## Docker socket (optional for DockerOperator)
+
     ports:
-      - "8080:8080"
-    volumes:
-      - ./:/workspace 
-      - ./dags:/opt/airflow/dags
-      - airflow_db:/opt/airflow
-      - airflow_logs:/opt/airflow/logs
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
-      - AIRFLOW_CONN_FS_PROJECT=${AIRFLOW_CONN_FS_PROJECT}
-      - PYTHONPATH=/workspace
-    networks:
-      - net
+      - "8082:8080"                        ## Map web UI to localhost:8082
 
-  airflow-scheduler:
-    build: ./Services/Airflow
-    command: scheduler
-    user: "0:0"
+    command: >
+      bash -c "
+        airflow db init &&  ## Initialize Airflow database
+        airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@example.com --password admin &&  ## Create default admin user
+        exec airflow webserver &  ## Start Airflow webserver
+        exec airflow scheduler     ## Start Airflow scheduler
+      "
+
+    restart: unless-stopped                ## Auto-restart unless manually stopped
+
+  ## ===========================================================
+  ## SERVICE: Data Collector
+  ## ===========================================================
+  data_collector:
+    build:
+      context: .                            ## Root context
+      dockerfile: Services/DataCollection/Dockerfile
+      args:
+        APP_INPUTDIR: ${APP_INPUTDIR:-${PWD:-%cd%}}
+
+    image: data_collector:latest            ## Image name
+    container_name: data_collector          ## Container name
+
+    volumes:
+      - ./Services/DataCollection:/opt/airflow/Services/DataCollection  ## Mount service code
+      - ./data:/opt/airflow/data                                       ## Share data with Airflow
+
+    environment:
+      - APP_INPUTDIR=${APP_INPUTDIR:-${PWD:-%cd%}}
+      - HOST_ROOT=${HOST_ROOT:-${PWD}}              ## Absolut path of the code folder
+
+    command: tail -f /dev/null             ## Keep container alive for debugging
+
+  ## ===========================================================
+  ## SERVICE: Data Preparation
+  ## ===========================================================
+  data_preparation:
+    build:
+      context: .                            ## Root context
+      dockerfile: Services/DataPreparation/Dockerfile
+      args:
+        APP_INPUTDIR: ${APP_INPUTDIR:-${PWD:-%cd%}}
+
+    image: data_preparation:latest          ## Image name
+    container_name: data_preparation        ## Container name
+
+    volumes:
+      - .:/opt/airflow                      ## Mount full project
+      - ./data:/opt/airflow/data            ## Share data folder
+
+    command: tail -f /dev/null              ## Keep container running for manual execution
+
+  ## ===========================================================
+  ## SERVICE: Model Training
+  ## ===========================================================
+  model_training:
+    build:
+      context: .                            ## Root context
+      dockerfile: Services/ModelTraining/Dockerfile
+      args:
+        APP_INPUTDIR: ${APP_INPUTDIR:-${PWD:-%cd%}}
+
+    image: model_training:latest            ## Image name
+    container_name: model_training          ## Container name
+
+    volumes:
+      - .:/opt/airflow                      ## Mount full project
+      - ./data:/opt/airflow/data            ## Share data folder
+
+    command: tail -f /dev/null              ## Keep container idle
+
+  ## ===========================================================
+  ## SERVICE: FastAPI (JWT/RBAC prediction API)
+  ## ===========================================================
+  api:
+    build:
+      context: ./Services/FastAPI
+      dockerfile: Dockerfile
+    image: fastapi_service:latest
+    container_name: fastapi_api
+
     env_file:
-      - .env
-    depends_on:
-      - airflow-webserver
-    volumes:
-      - ./:/workspace 
-      - ./dags:/opt/airflow/dags
-      - airflow_db:/opt/airflow
-      - airflow_logs:/opt/airflow/logs
-      - /var/run/docker.sock:/var/run/docker.sock
+      - .env          
     environment:
-      - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
-      - AIRFLOW_CONN_FS_PROJECT=${AIRFLOW_CONN_FS_PROJECT}
-      - PYTHONPATH=/workspace
-      - APP_INPUTDIR=${PWD}
-      - DATA_PATH=data
-    networks:
-      - net
+      - APP_PORT=8000   
+      - PYTHONPATH=/app
 
-  fast_api:
-    build: ./Services/FastAPI
+    volumes:
+      - ./Services/FastAPI/src:/app/src:rw
+      - ./model:/app/model:rw
+      - ./metrics:/app/metrics:rw
+      - ./resources:/app/resources:rw
+
     ports:
       - "8000:8000"
-    volumes:
-      - ./model:/app/model:rw
-      - ./logs:/app/logs
-    networks:
-      - net
     restart: unless-stopped
 
-  data_collector:
-    build: ./Services/DataCollection
-    image: data_collector:latest
-    volumes:
-      - ./Services/DataCollection/src:/workspace/Services/DataCollection/src
-      - ./Services/DataCollection/data:/workspace/Services/DataCollection/data
-      - ./Services/DataCollection/data:/workspace/Services/data
-      - ./Services/utils:/workspace/Services/utils
-      - ./Services/FastAPI:/workspace/Services/FastAPI
-    environment:
-      - PYTHONPATH=/workspace:/workspace/Services/DataCollection/src:/workspace/Services/utils:/workspace/Services/FastAPI
-    networks:
-      - net
-    tty: true
-    stdin_open: true
-
-  data_preparation:
-    build: ./Services/DataPreparation
-    image: data_preparation:latest
-    volumes:
-      - ./Services/DataPreparation/src:/workspace/Services/DataPreparation/src
-      - ./Services/DataCollection/data:/workspace/Services/DataCollection/data
-      - ./Services/utils:/workspace/Services/utils
-      - ./Services/FastAPI:/workspace/Services/FastAPI
-    environment:
-      - PYTHONPATH=/workspace:/workspace/Services/DataPreparation/src:/workspace/Services/utils:/workspace/Services/FastAPI
-    networks:
-      - net
-    tty: true
-    stdin_open: true
-
-  model_training:
-    build: ./Services/ModelTraining
-    image: model_training:latest
-    volumes:
-      - ./Services/ModelTraining/src:/workspace/Services/ModelTraining/src
-      - ./Services/DataPreparation/data:/workspace/Services/DataPreparation/data
-      - ./Services/DataCollection/data:/workspace/Services/DataCollection/data
-      - ./Services/model:/workspace/Services/model
-      - ./Services/utils:/workspace/Services/utils
-      - ./Services/FastAPI:/workspace/Services/FastAPI
-    environment:
-      - PYTHONPATH=/workspace:/workspace/Services/ModelTraining/src:/workspace/Services/utils:/workspace/Services/FastAPI
-    networks: [net]
-    tty: true
-    stdin_open: true
-
-
+## ===========================================================
+## NETWORK CONFIGURATION
+## ===========================================================
 networks:
-  net:
+  default:
+    name: airflow_network                   ## Shared network for all services
 
+## ===========================================================
+## PERSISTENT VOLUMES
+## ===========================================================
 volumes:
-  airflow_db:
-  airflow_logs:
-
-
-
-    
+  airflow_db:                               ## Persistent volume for Airflow SQLite database

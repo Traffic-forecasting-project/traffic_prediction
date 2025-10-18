@@ -7,21 +7,30 @@ __status__ = "Dev"
 __desc__ = "FastAPI JWT authentication, creation and verification"
 '''
 
-from datetime import datetime, timedelta
-from typing import Optional
-
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
+from datetime import datetime, timedelta
+from typing import Optional
 from jose import JWTError, jwt
 
-from src.core.logging_utils import get_logger
-from src.auth.roles import USERS_DB, UserInDB
-from src.core.constants import (
-    SECRET_KEY,
-    ALGORITHM,
-    ACCESS_TOKEN_EXPIRE_MINUTES
-)
-
+## Imports for "microservice" et "legacy" structures respectively
+try:
+    from Services.FastAPI.src.logging_utils import get_logger
+    from Services.FastAPI.src.auth.roles import USERS_DB, UserInDB    
+    from Services.FastAPI.src.constants import (
+        SECRET_KEY,
+        ALGORITHM,
+        ACCESS_TOKEN_EXPIRE_MINUTES
+    )
+except:
+    from src.core.logging_utils import get_logger
+    from src.auth.roles import USERS_DB, UserInDB
+    from src.core.constants import (
+        SECRET_KEY,
+        ALGORITHM,
+        ACCESS_TOKEN_EXPIRE_MINUTES
+    )
+       
 ## ============================
 ## Setup logger
 ## ============================

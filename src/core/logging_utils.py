@@ -81,7 +81,7 @@ def log_execution_time_and_path(func):
         Logs the time taken to execute the decorated function and
         captures any exceptions raised during its execution
 
-        Parameters:
+        Args:
             func (callable): The function to decorate
 
         Returns:

@@ -1,16 +1,36 @@
-FROM apache/airflow:2.9.0-python3.10
+# ===========================================================
+# AIRFLOW SERVICE DOCKERFILE
+# ===========================================================
+FROM apache/airflow:2.8.3-python3.10
 
-WORKDIR /opt/airflow
+# Switch to root to prepare folders
+USER root
 
-COPY requirements.txt /opt/airflow/requirements.txt
+# Create required directories
+RUN mkdir -p /opt/airflow/dags \
+    && mkdir -p /opt/airflow/logs \
+    && mkdir -p /opt/airflow/data \
+    && mkdir -p /opt/airflow/model \
+    && mkdir -p /opt/airflow/Services \
+    && chmod -R 777 /opt/airflow
 
+# Copy requirements
+COPY requirements.txt /requirements.txt
+
+# Switch to airflow user for pip install (Airflow restriction)
 USER airflow
-RUN pip install --no-cache-dir --progress-bar=off -r /opt/airflow/requirements.txt
+RUN pip install --no-cache-dir -r /requirements.txt
 
-#COPY --chown=airflow:airflow src /opt/airflow/src
-# COPY --chown=airflow:airflow dags /opt/airflow/dags
+# Back to root to copy project code
+USER root
+COPY . /opt/airflow/
 
-ENV PYTHONPATH="/opt/airflow:/opt/airflow/src:/opt/airflow/Services:${PYTHONPATH}"
+# Environment setup
+ENV AIRFLOW_HOME=/opt/airflow
+ENV PYTHONPATH=/opt/airflow
 
-EXPOSE 8080
-CMD ["bash"]
+# Switch back to airflow user
+USER airflow
+
+# Default command
+CMD ["bash", "-c", "airflow db init && airflow webserver & airflow scheduler"]

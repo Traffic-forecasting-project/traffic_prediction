@@ -15,49 +15,68 @@ import random
 import logging
 import pandas as pd
 import os
+import sys
 from dotenv import load_dotenv, find_dotenv
 
-# check if loading the .env file works
+## check if loading the .env file works
 load_dotenv(find_dotenv())
 
-# check if loading the .env file works
+## check if loading the .env file works
 if not os.getenv("PYTHONPATH"):
     print("PYTHONPATH not set")
 else:
     print(f"PYTHONPATH is set to: {os.getenv('PYTHONPATH')}")
+    
+## Imports for "microservice" et "legacy" structures respectively
+try:
+            
+    from Services.utils.utils import save_csv
+    from Services.utils.utils_api_calls import (
+        get_weather,
+        get_traffic_flow,
+        get_incidents
+    )
+    from Services.utils.utils_coordinates import (
+        extract_point_list_from_geometry,
+        get_bbox_from_coords,
+        split_bbox
+    )
+    from Services.FastAPI.src.constants import (
+        DELTA_BBOX,
+        ARRONDISSEMENTS_PATH,
+        CSV_PATH,
+        MULTIPLE_WEATHER_CALLS,
+        WEATHER_REFRESH_DELAY,
+        MAX_CALLS_PER_DAY,
+        CALL_DELAY_SECONDS,
+        NB_POINTS_TO_COLLECT,
+        BBOX_SPLIT_COUNT,
+    )
 
-# Add repo root (/workspace) so `from Services...` works both locally and in Docker
-# import sys
-# from pathlib import Path
-# REPO_ROOT = Path(__file__).resolve().parents[2]  # .../traffic_prediction
-# if str(REPO_ROOT) not in sys.path:
-#     sys.path.insert(0, str(REPO_ROOT))
-
-# print(f"Repo root added to PYTHONPATH: {REPO_ROOT}")
-
-from Services.utils.utils import save_csv
-from Services.utils.utils_api_calls import (
-    get_weather,
-    get_traffic_flow,
-    get_incidents
-)
-from Services.utils.utils_coordinates import (
-    extract_point_list_from_geometry,
-    get_bbox_from_coords,
-    split_bbox
-)
-from Services.FastAPI.src.constants import (
-    DELTA_BBOX,
-    ARRONDISSEMENTS_PATH,
-    CSV_PATH,
-    MULTIPLE_WEATHER_CALLS,
-    WEATHER_REFRESH_DELAY,
-    MAX_CALLS_PER_DAY,
-    CALL_DELAY_SECONDS,
-    NB_POINTS_TO_COLLECT,
-    BBOX_SPLIT_COUNT,
-)
-
+except:
+    from src.utils.utils import save_csv
+    from src.utils.utils_api_calls import (
+        get_weather,
+        get_traffic_flow,
+        get_incidents
+    )
+    from src.utils.utils_coordinates import (
+        extract_point_list_from_geometry,
+        get_bbox_from_coords,
+        split_bbox
+    )
+    from src.core.constants import (
+        DELTA_BBOX,
+        ARRONDISSEMENTS_PATH,
+        CSV_PATH,
+        MULTIPLE_WEATHER_CALLS,
+        WEATHER_REFRESH_DELAY,
+        MAX_CALLS_PER_DAY,
+        CALL_DELAY_SECONDS,
+        NB_POINTS_TO_COLLECT,
+        BBOX_SPLIT_COUNT,
+    )
+    
 calls_today = 0  ## Counter for total API calls (weather)
 last_weather_time = None  ## Last time weather was fetched
 last_weather_data = None  ## Cached result if shared
@@ -276,11 +295,11 @@ def collect_from_bbox(
     return df[columns_order]
     
 def run_live_data_pipeline(
-    arrondissement: int | None = None,
-    arrondissement_path: str | None = None,        
-    strategy: str | None = None,
-    max_rows: int | None = None,
-    max_duration: int | None = None
+    arrondissement: int | None = 17,
+    arrondissement_path: str | None = os.path.join("data", "arrondissements.csv"),
+    strategy: str | None = "incident_analysis",
+    max_rows: int | None = int(os.getenv("DATACOLLECTION_MAX_ROWS", 10000)),
+    max_duration: int | None = int(os.getenv("DATACOLLECTION_MAX_DURATION", 60))
 ) -> None:
     """
         Run the live data collection loop using the specified strategy.
@@ -322,6 +341,7 @@ def run_live_data_pipeline(
 
     ## Main data collection loop
     while success_count < max_rows and calls_today + 3 <= MAX_CALLS_PER_DAY:
+    
         ## Stop if timeout exceeded
         if time.time() - start_time >= max_duration:
             logging.info(f"Timeout reached after {max_duration}s, stopping gracefully.")
@@ -394,43 +414,11 @@ def load_api_keys(arrondissement: int) -> tuple:
     weather_key = os.getenv(f"WEATHER_KEY_{arrondissement}")
     return tomtom_key, weather_key
 
-# Add main with run_live_data_pipeline
-#if __name__ == "__main__":
-    #import argparse
-    #import sys
-    #import io
-
-    ## Ensure UTF-8 encoding for console output
-    #sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
-
-    # ## Setup logging
-    # logging.basicConfig(
-    #     level=logging.INFO,
-    #     format="%(asctime)s [%(levelname)s] %(message)s",
-    #     handlers=[
-    #         logging.FileHandler("logs/live_data_collector.log"),
-    #         logging.StreamHandler(sys.stdout)
-    #     ]
-    # )
-
-    # #Add print to see if the logging is working
-    # logging.info("Logging is set up.")
-
-    # ## Ensure directories exist
-    # os.makedirs("logs", exist_ok=True)
-    # os.makedirs("data", exist_ok=True)
-    # os.makedirs("data/raw", exist_ok=True)
-    # os.makedirs("data/live", exist_ok=True)
-
-    ## Valid parameters
-    #VALID_STRATEGIES = ["traffic_analysis", "incident_analysis"]
-    #VALID_ARRONDISSEMENTS = list(range(1, 21))
-
-
 def parse_arguments() -> argparse.Namespace:
     """
-    Parse CLI arguments
+        Parse CLI arguments
     """
+    
     parser = argparse.ArgumentParser(description="Live Data Collector CLI")
     parser.add_argument("-a", "--arrondissement", type=int, default=17,
                         help="Paris arrondissement (1–20)")
@@ -449,7 +437,6 @@ def parse_arguments() -> argparse.Namespace:
                         help="Path to the arrondissements CSV file")
                           
     return parser.parse_args()
-
 
 if __name__ == "__main__":
     args = parse_arguments()
