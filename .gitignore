@@ -37,3 +37,6 @@ Thumbs.db
 .idea/
 # venv
 .venv
+!monitoring/grafana/dashboards/*.json
+monitoring/grafana/plugins
+*/grafana.db

@@ -1,0 +1,11 @@
+# Node/Grafana caches
+monitoring/grafana/grafana.db
+monitoring/grafana/plugins/
+monitoring/grafana/png/
+monitoring/grafana/pdf/
+monitoring/grafana/csv/
+
+# Only need provisioned files, ignore the rest of grafana dir
+monitoring/grafana/*
+!monitoring/grafana/dashboards/**
+!monitoring/grafana/datasources/**

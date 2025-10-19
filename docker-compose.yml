@@ -99,6 +99,8 @@ services:
       args:
         APP_INPUTDIR: ${APP_INPUTDIR:-${PWD:-%cd%}}
 
+    env_file:
+    - .env
     image: model_training:latest            ## Image name
     container_name: model_training          ## Container name
 
@@ -108,7 +110,76 @@ services:
 
     command: tail -f /dev/null              ## Keep container idle
 
+  
+
   ## ===========================================================
+  ## SERVICE: Prometheus (Monitoring)
+  ## ===========================================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml  # Fichier de config
+      # - ./monitoring/prometheus/alert.rules.yml:/etc/prometheus/alert.rules.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - default
+
+  ## ===========================================================
+  ## SERVICE: Node Exporter (Host Metrics)
+  ## ===========================================================
+  node_exporter:
+    image: prom/node-exporter:latest
+    container_name: node_exporter
+    ports:
+      - "9100:9100"
+    networks:
+      - default
+
+  ## ===========================================================
+  ## SERVICE: cAdvisor (Container Metrics)
+  ## ===========================================================
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    ports:
+      - "8085:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - default
+
+  ## ===========================================================
+  ## SERVICE: Grafana (Dashboard Visualization)
+  ## ===========================================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    user: "0:0" # root temporairement
+    entrypoint: >
+      sh -c "chown -R 472:472 /var/lib/grafana && exec grafana-server"
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - default
+
+
+
+## ===========================================================
   ## SERVICE: FastAPI (JWT/RBAC prediction API)
   ## ===========================================================
   api:

@@ -21,7 +21,8 @@ import os
 import json
 import sys
 from pathlib import Path
-
+from prometheus_fastapi_instrumentator import Instrumentator
+from prometheus_client import Summary
 ## Imports for "microservice" et "legacy" structures respectively
 try:
  
@@ -74,7 +75,8 @@ logger = get_logger(__name__)
 model = None         # Holds the trained ML model
 FEATURE_ORDER = []   # Stores expected feature order
 FEATURE_FILE = Path("resources/feature_importances.json")  # Fallback file for features
-
+## Prometheus: summary for inference time
+inference_time_summary = Summary('inference_time_seconds', 'Time taken for inference')
 ## MODEL_PATH is now safe and works everywhere
 MODEL_PATH = MODEL_PATH.replace("Services\\", "")
 MODEL_PATH = MODEL_PATH.replace("Services/", "")
@@ -87,6 +89,10 @@ app = FastAPI(
     description="API to predict incident_duration_min with JWT protection.",
     version="1.0.0"
 )
+# Prometheus instrumentation (expose on /prometheus to avoid clashing with existing /metrics)
+instrumentator = Instrumentator().instrument(app)
+instrumentator.expose(app, endpoint="/prometheus", include_in_schema=False)
+instrumentator.excluded_handlers = ["/prometheus"]  # 👈 Exclude it from metrics
 
 ## ============================
 ## Authentication routes
@@ -330,7 +336,8 @@ def predict(
         logger.debug(f"Features DataFrame before prediction:\n{features_df}")
 
         ## Predict and format
-        pred = mdl.predict(features_df)[0]
+        with inference_time_summary.time():
+            pred = mdl.predict(features_df)[0]
         logger.info(f"Prediction completed: {pred:.2f} minutes")
 
         return {"predicted_incident_duration_min": round(float(pred), 2)}
@@ -413,8 +420,9 @@ def batch_predict(
         ## Debug print: display first few rows of the DataFrame
         logger.debug(f"Batch features DataFrame:\n{features_df.head()}")
 
-        ## Perform predictions
-        preds = mdl.predict(features_df)
+        ## Perform predictions (timed)
+        with inference_time_summary.time():
+            preds = mdl.predict(features_df)
 
         ## Build structured JSON results
         results = [
