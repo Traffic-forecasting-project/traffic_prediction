@@ -1,4 +1,4 @@
-# 🚦 MLOps Project – Traffic Forecasting & Incident Analysis
+<w# 🚦 MLOps Project – Traffic Forecasting & Incident Analysis
 
 ## 🧠 Objective
 
@@ -240,4 +240,4 @@ Select what to push [raw/processed/train/all] (default: raw): raw
 
 ## 📞 Contact
 
-> Email: georges.nassopoulos@gmail.com, ingmatvillaa@gmail.com, elqounss.karim@gmail.com
+> Email: georges.nassopoulos@gmail.com, Mateo Villa Arias (LinkedIn), elqounss.karim@gmail.com
